@@ -5,8 +5,11 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/index.js",
-    "dev": "tsx watch src/index.ts",
+    "start": "concurrently --names 'API,WORKER' --prefix-colors 'cyan,yellow' 'node dist/index.js' 'node dist/worker.js'",
+    "start:all": "concurrently --names 'API,WORKER' --prefix-colors 'cyan,yellow' 'tsx src/index.ts' 'tsx src/worker.ts'",
+    "dev": "concurrently --names 'API,WORKER' --prefix-colors 'cyan,yellow' 'tsx watch src/index.ts' 'tsx watch src/worker.ts'",
+    "dev:api": "tsx watch src/index.ts",
+    "dev:worker": "tsx watch src/worker.ts",
     "migrate": "tsx src/db/migrate.ts",
     "migrate:down": "tsx src/db/migrate.ts down",
     "seed": "tsx src/db/seed.ts",
@@ -31,6 +34,7 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "concurrently": "^8.2.2",
     "@types/bcryptjs": "^2.4.6",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
