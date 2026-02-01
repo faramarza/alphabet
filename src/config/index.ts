@@ -11,8 +11,13 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const envSchema = z.object({
-  // Database
-  DATABASE_URL: z.string().min(1),
+  // Database - support both DATABASE_URL and individual params
+  DATABASE_URL: z.string().optional(),
+  DB_HOST: z.string().default('localhost'),
+  DB_PORT: z.coerce.number().default(5432),
+  DB_NAME: z.string().default('alphabet_trains'),
+  DB_USER: z.string().default('postgres'),
+  DB_PASSWORD: z.string().default(''),
   DATABASE_POOL_MIN: z.coerce.number().default(2),
   DATABASE_POOL_MAX: z.coerce.number().default(10),
 
@@ -27,9 +32,9 @@ const envSchema = z.object({
   // Merchant Center
   MERCHANT_CENTER_ID: z.string().optional(),
 
-  // Authentication
-  JWT_SECRET: z.string().min(32),
-  ADMIN_TOKEN: z.string().min(16),
+  // Authentication - use defaults for development
+  JWT_SECRET: z.string().min(32).default('dev-jwt-secret-change-in-production-min32chars'),
+  ADMIN_TOKEN: z.string().min(16).default('dev-admin-token-16'),
 
   // Email Notifications
   SMTP_HOST: z.string().optional(),
@@ -63,13 +68,22 @@ function loadConfig() {
 
   const env = result.data;
 
+  // Build DATABASE_URL from individual params if not provided
+  const databaseUrl = env.DATABASE_URL ||
+    `postgresql://${env.DB_USER}${env.DB_PASSWORD ? ':' + env.DB_PASSWORD : ''}@${env.DB_HOST}:${env.DB_PORT}/${env.DB_NAME}`;
+
   return {
     nodeEnv: env.NODE_ENV,
     port: env.PORT,
     logLevel: env.LOG_LEVEL,
 
     database: {
-      url: env.DATABASE_URL,
+      url: databaseUrl,
+      host: env.DB_HOST,
+      port: env.DB_PORT,
+      name: env.DB_NAME,
+      user: env.DB_USER,
+      password: env.DB_PASSWORD,
       poolMin: env.DATABASE_POOL_MIN,
       poolMax: env.DATABASE_POOL_MAX,
     },
