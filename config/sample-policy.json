@@ -1,0 +1,25 @@
+{
+  "$schema": "./policy-schema.json",
+  "$comment": "Sample policy configuration for Alphabet Trains retail PMax campaigns",
+
+  "break_even_roas": 4.0,
+  "target_roas": 5.0,
+
+  "max_daily_spend_cap": 100,
+  "hard_limit": 300,
+  "max_step_budget_increase_pct": 10,
+  "max_step_budget_decrease_pct": 20,
+  "cooldown_days_budget_changes": 7,
+  "max_weekly_loss_usd": 500,
+
+  "roas_drop_safety_threshold_pct": 30,
+  "min_conversions_for_confidence": 10,
+  "min_data_days_for_proposal": 7,
+
+  "max_lead_time_days_for_scaling": 5,
+  "block_scaling_on_high_fulfillment_risk": true,
+
+  "autopilot_enabled": false,
+  "autopilot_actions": [],
+  "autopilot_max_budget_change_usd": 10
+}
