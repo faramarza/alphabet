@@ -131,13 +131,13 @@ CREATE TABLE snapshots (
 
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
-    CONSTRAINT snapshots_unique_daily UNIQUE (campaign_id, snapshot_date, asset_group_id)
-        WHERE snapshot_hour IS NULL,
-    CONSTRAINT snapshots_unique_hourly UNIQUE (campaign_id, snapshot_date, snapshot_hour, asset_group_id)
-        WHERE snapshot_hour IS NOT NULL,
     CONSTRAINT valid_snapshot_hour CHECK (snapshot_hour IS NULL OR (snapshot_hour >= 0 AND snapshot_hour <= 23))
 );
 
+CREATE UNIQUE INDEX snapshots_unique_daily ON snapshots(campaign_id, snapshot_date, asset_group_id)
+    WHERE snapshot_hour IS NULL;
+CREATE UNIQUE INDEX snapshots_unique_hourly ON snapshots(campaign_id, snapshot_date, snapshot_hour, asset_group_id)
+    WHERE snapshot_hour IS NOT NULL;
 CREATE INDEX idx_snapshots_campaign_date ON snapshots(campaign_id, snapshot_date DESC);
 CREATE INDEX idx_snapshots_date ON snapshots(snapshot_date DESC);
 CREATE INDEX idx_snapshots_campaign_range ON snapshots(campaign_id, snapshot_date)
