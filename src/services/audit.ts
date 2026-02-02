@@ -345,3 +345,262 @@ export function getAuditLogger(): AuditLogger {
 export async function logAuditEvent(entry: AuditLogEntry): Promise<AuditEvent> {
   return getAuditLogger().log(entry);
 }
+
+// ============================================================================
+// SIGNED CHECKPOINTS & EXPORT
+// ============================================================================
+
+export interface AuditCheckpoint {
+  id: string;
+  created_at: Date;
+  event_count: number;
+  first_event_id: string;
+  last_event_id: string;
+  last_event_hash: string;
+  checkpoint_hash: string;
+  signature?: string; // Optional HMAC signature if secret is configured
+}
+
+export interface AuditExportBundle {
+  export_id: string;
+  exported_at: string;
+  checkpoint?: AuditCheckpoint;
+  events: AuditEvent[];
+  chain_valid: boolean;
+  summary: {
+    total_events: number;
+    date_range: { start: string; end: string };
+    event_types: Record<string, number>;
+    actors: string[];
+  };
+}
+
+/**
+ * Create a signed checkpoint at the current point in the audit log
+ */
+export async function createAuditCheckpoint(signingSecret?: string): Promise<AuditCheckpoint> {
+  const logger = getAuditLogger();
+
+  // Get current state
+  const latestEvents = await logger.query({ limit: 1 });
+  const totalCount = await logger.count();
+
+  if (latestEvents.length === 0) {
+    throw new Error('No audit events to checkpoint');
+  }
+
+  const lastEvent = latestEvents[0]!;
+
+  // Get first event
+  const firstEventResult = await query<AuditEventRow>(
+    `SELECT * FROM audit_events ORDER BY timestamp ASC, id ASC LIMIT 1`
+  );
+  const firstEvent = firstEventResult.rows[0];
+
+  if (!firstEvent) {
+    throw new Error('No audit events found');
+  }
+
+  const checkpointId = uuidv4();
+  const createdAt = new Date();
+
+  // Create checkpoint hash
+  const checkpointData = [
+    checkpointId,
+    createdAt.toISOString(),
+    totalCount.toString(),
+    firstEvent.id,
+    lastEvent.id,
+    lastEvent.hash,
+  ].join('|');
+
+  const checkpointHash = createHash('sha256').update(checkpointData).digest('hex');
+
+  // Optional: sign with HMAC if secret provided
+  let signature: string | undefined;
+  if (signingSecret) {
+    const hmac = createHash('sha256');
+    hmac.update(signingSecret);
+    hmac.update(checkpointHash);
+    signature = hmac.digest('hex');
+  }
+
+  const checkpoint: AuditCheckpoint = {
+    id: checkpointId,
+    created_at: createdAt,
+    event_count: totalCount,
+    first_event_id: firstEvent.id,
+    last_event_id: lastEvent.id,
+    last_event_hash: lastEvent.hash,
+    checkpoint_hash: checkpointHash,
+    signature,
+  };
+
+  // Store checkpoint
+  await query(
+    `INSERT INTO audit_checkpoints (id, created_at, event_count, first_event_id, last_event_id, last_event_hash, checkpoint_hash, signature)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    [
+      checkpoint.id,
+      checkpoint.created_at,
+      checkpoint.event_count,
+      checkpoint.first_event_id,
+      checkpoint.last_event_id,
+      checkpoint.last_event_hash,
+      checkpoint.checkpoint_hash,
+      checkpoint.signature ?? null,
+    ]
+  );
+
+  return checkpoint;
+}
+
+/**
+ * Export audit log as a verifiable bundle for external review
+ */
+export async function exportAuditBundle(options?: {
+  start_date?: Date;
+  end_date?: Date;
+  limit?: number;
+  include_checkpoint?: boolean;
+}): Promise<AuditExportBundle> {
+  const logger = getAuditLogger();
+
+  // Query events
+  const events = await logger.query({
+    start_date: options?.start_date,
+    end_date: options?.end_date,
+    limit: options?.limit ?? 10000,
+  });
+
+  // Verify chain integrity
+  const verification = await logger.verifyChain(events.length);
+
+  // Get or create checkpoint if requested
+  let checkpoint: AuditCheckpoint | undefined;
+  if (options?.include_checkpoint) {
+    try {
+      checkpoint = await createAuditCheckpoint();
+    } catch {
+      // No events or checkpoint creation failed
+    }
+  }
+
+  // Build summary
+  const eventTypes: Record<string, number> = {};
+  const actorSet = new Set<string>();
+  let minDate: Date | null = null;
+  let maxDate: Date | null = null;
+
+  for (const event of events) {
+    eventTypes[event.event_type] = (eventTypes[event.event_type] || 0) + 1;
+    actorSet.add(event.actor);
+
+    if (!minDate || event.timestamp < minDate) minDate = event.timestamp;
+    if (!maxDate || event.timestamp > maxDate) maxDate = event.timestamp;
+  }
+
+  return {
+    export_id: uuidv4(),
+    exported_at: new Date().toISOString(),
+    checkpoint,
+    events,
+    chain_valid: verification.valid,
+    summary: {
+      total_events: events.length,
+      date_range: {
+        start: minDate?.toISOString() ?? '',
+        end: maxDate?.toISOString() ?? '',
+      },
+      event_types: eventTypes,
+      actors: Array.from(actorSet),
+    },
+  };
+}
+
+/**
+ * Verify an exported audit bundle
+ */
+export function verifyAuditBundle(bundle: AuditExportBundle, signingSecret?: string): {
+  valid: boolean;
+  issues: string[];
+} {
+  const issues: string[] = [];
+
+  // Check chain validity flag
+  if (!bundle.chain_valid) {
+    issues.push('Bundle reports chain is invalid');
+  }
+
+  // Re-verify the hash chain
+  let expectedPrevHash = '0000000000000000000000000000000000000000000000000000000000000000';
+
+  // Sort events by timestamp for verification
+  const sortedEvents = [...bundle.events].sort(
+    (a, b) => a.timestamp.getTime() - b.timestamp.getTime()
+  );
+
+  for (const event of sortedEvents) {
+    // For first event or if we're starting mid-chain, accept the prev_hash
+    if (event.prev_hash !== expectedPrevHash && expectedPrevHash !== '0000000000000000000000000000000000000000000000000000000000000000') {
+      // Check if this might be the first event in the export (not first in chain)
+      if (sortedEvents.indexOf(event) === 0) {
+        expectedPrevHash = event.prev_hash;
+      } else {
+        issues.push(`Hash chain broken at event ${event.id}`);
+      }
+    }
+
+    // Recompute hash
+    const computedHash = computeHash(
+      event.event_type,
+      event.entity_type,
+      event.entity_id,
+      event.actor,
+      event.action,
+      event.details,
+      event.timestamp,
+      event.prev_hash
+    );
+
+    if (computedHash !== event.hash) {
+      issues.push(`Hash mismatch at event ${event.id}`);
+    }
+
+    expectedPrevHash = event.hash;
+  }
+
+  // Verify checkpoint signature if present
+  if (bundle.checkpoint?.signature && signingSecret) {
+    const hmac = createHash('sha256');
+    hmac.update(signingSecret);
+    hmac.update(bundle.checkpoint.checkpoint_hash);
+    const expectedSignature = hmac.digest('hex');
+
+    if (expectedSignature !== bundle.checkpoint.signature) {
+      issues.push('Checkpoint signature verification failed');
+    }
+  }
+
+  return {
+    valid: issues.length === 0,
+    issues,
+  };
+}
+
+interface AuditEventRow {
+  id: string;
+  event_type: string;
+  entity_type: string;
+  entity_id: string | null;
+  actor: string;
+  action: string;
+  details: Record<string, unknown>;
+  before_state: Record<string, unknown> | null;
+  after_state: Record<string, unknown> | null;
+  api_request_id: string | null;
+  api_response_id: string | null;
+  timestamp: Date;
+  hash: string;
+  prev_hash: string;
+}

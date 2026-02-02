@@ -10,6 +10,8 @@ import { logAuditEvent } from './audit.js';
 import { getPolicyService, getCampaignSettingsService, getOpsSignalsService } from './policy.js';
 import { getSnapshotsService } from './snapshots.js';
 import { getSystemStateService } from './system-state.js';
+import { checkMeasurementHealth, getCampaignLagAdjustedROAS } from './measurement-integrity.js';
+import { checkProposalEligibility } from './proposal-quality.js';
 import {
   ProposalStatus,
   ProposalType,
@@ -100,6 +102,7 @@ export class ProposalGeneratorService {
 
   /**
    * Generate budget change proposals for a campaign
+   * ENHANCED: Now includes measurement integrity and proposal quality checks
    */
   async generateBudgetProposals(
     campaignId: string,
@@ -111,6 +114,29 @@ export class ProposalGeneratorService {
     const opsService = getOpsSignalsService();
     const snapshotsService = getSnapshotsService();
     const systemState = getSystemStateService();
+
+    // =========================================================================
+    // STEP 1: Check Measurement Integrity (NEW)
+    // =========================================================================
+    const measurementHealth = await checkMeasurementHealth(campaignId);
+
+    if (!measurementHealth.canPropose) {
+      console.log(`[Proposal] Measurement integrity check failed for ${campaignId}:`);
+      measurementHealth.issues.forEach(issue => {
+        console.log(`  - [${issue.severity}] ${issue.type}: ${issue.message}`);
+      });
+      return null;
+    }
+
+    // =========================================================================
+    // STEP 2: Check Proposal Quality Gates (NEW)
+    // =========================================================================
+    const eligibility = await checkProposalEligibility(campaignId);
+
+    if (!eligibility.eligible) {
+      console.log(`[Proposal] Not eligible for ${campaignId}: ${eligibility.reason}`);
+      return null;
+    }
 
     // Get policy config
     const policy = await policyService.getEffectiveConfig(campaignId);
@@ -132,7 +158,7 @@ export class ProposalGeneratorService {
       blockingReasons.push('C2');
     }
 
-    // Check cooldown
+    // Cooldown now handled by proposal-quality service, but keep legacy check
     const cooldownPassed = await settingsService.isCooldownPassed(
       campaignId,
       policy.cooldown_days_budget_changes
@@ -167,13 +193,18 @@ export class ProposalGeneratorService {
     // Use 30d if available, otherwise extrapolate from 14d
     const metrics30dEffective = metrics30d ?? this.extrapolateMetrics(metrics14d, 30);
 
-    // Check for conversion tracking issues
+    // Check for conversion tracking issues (enhanced with measurement integrity)
     if (this.suspectConversionTrackingBroken(metrics7d)) {
       await systemState.triggerSafetyStop(
         `Suspected conversion tracking issue: ${campaignId} - conversions dropped to near zero while spend continues`
       );
       return null;
     }
+
+    // Get lag-adjusted ROAS for more accurate decisions
+    const lagAdjustedData = await getCampaignLagAdjustedROAS(campaignId);
+    console.log(`[Proposal] ${campaignId} lag-adjusted ROAS: ${lagAdjustedData.roas.toFixed(2)} (confidence: ${(lagAdjustedData.confidence * 100).toFixed(0)}%)`);
+    console.log(`[Proposal] ${campaignId} raw ROAS: ${lagAdjustedData.rawROAS.toFixed(2)} (includes last ${measurementHealth.lagAdjustedWindow.excludedDays} days with incomplete conversions)`);
 
     // Evaluate budget direction
     const evaluation = this.evaluateBudgetDirection(
@@ -197,7 +228,7 @@ export class ProposalGeneratorService {
       policy
     );
 
-    // Build evidence pack
+    // Build evidence pack (enhanced with measurement integrity data)
     const evidence = this.buildEvidencePack(
       metrics7d,
       metrics14d,
@@ -205,7 +236,13 @@ export class ProposalGeneratorService {
       evaluation,
       currentBudgetMicros,
       proposedBudgetMicros,
-      policy
+      policy,
+      {
+        lagAdjustedROAS: lagAdjustedData.roas,
+        measurementConfidence: measurementHealth.confidence,
+        evidenceScore: eligibility.evidenceScore,
+        measurementIssues: measurementHealth.issues,
+      }
     );
 
     // Determine if autopilot can execute
@@ -360,6 +397,7 @@ export class ProposalGeneratorService {
 
   /**
    * Build evidence pack with ranges (no single-number promises)
+   * ENHANCED: Now includes measurement integrity data
    */
   private buildEvidencePack(
     metrics7d: AggregatedMetrics,
@@ -368,7 +406,13 @@ export class ProposalGeneratorService {
     evaluation: { direction: 'increase' | 'decrease'; changePct: number; reasons: string[] },
     currentBudgetMicros: bigint,
     proposedBudgetMicros: bigint,
-    policy: PolicyConfig
+    policy: PolicyConfig,
+    integrityData?: {
+      lagAdjustedROAS: number;
+      measurementConfidence: number;
+      evidenceScore: number;
+      measurementIssues: Array<{ type: string; severity: string; message: string }>;
+    }
   ): EvidencePack {
     const reasonDescriptions = evaluation.reasons.map((code) => REASON_CODES[code as keyof typeof REASON_CODES] ?? code);
 
@@ -399,6 +443,12 @@ export class ProposalGeneratorService {
     // Downside scenario
     const downsideMaxLoss = currentDailySpend * 7 * (1 - policy.break_even_roas / metrics7d.roas);
 
+    // Calculate final confidence score (enhanced with measurement integrity)
+    const baseConfidence = this.calculateConfidenceScore(metrics7d, metrics14d, metrics30d);
+    const adjustedConfidence = integrityData
+      ? Math.round(baseConfidence * integrityData.measurementConfidence)
+      : baseConfidence;
+
     return {
       reason_codes: evaluation.reasons,
       reason_descriptions: reasonDescriptions,
@@ -411,7 +461,7 @@ export class ProposalGeneratorService {
       coverage_score: Math.round(
         (metrics7d.data_coverage_pct + metrics14d.data_coverage_pct + metrics30d.data_coverage_pct) / 3
       ),
-      confidence_score: this.calculateConfidenceScore(metrics7d, metrics14d, metrics30d),
+      confidence_score: adjustedConfidence,
       confidence_factors: this.getConfidenceFactors(metrics7d, metrics14d),
       budget_limited_signals: {
         spend_hitting_cap_days: Math.round(metrics7d.data_coverage_pct / 10), // Estimate
@@ -430,6 +480,13 @@ export class ProposalGeneratorService {
         threshold: policy.break_even_roas,
         action: 'Automatic budget decrease or pause',
       },
+      // New measurement integrity fields
+      lag_adjusted_roas: integrityData?.lagAdjustedROAS,
+      measurement_confidence: integrityData?.measurementConfidence,
+      evidence_score: integrityData?.evidenceScore,
+      measurement_warnings: integrityData?.measurementIssues
+        .filter(i => i.severity === 'warning')
+        .map(i => i.message),
     };
   }
 

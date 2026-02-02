@@ -270,6 +270,12 @@ export interface EvidencePack {
     threshold: number;
     action: string;
   };
+
+  // Measurement integrity fields (optional, added by measurement-integrity service)
+  lag_adjusted_roas?: number;
+  measurement_confidence?: number;
+  evidence_score?: number;
+  measurement_warnings?: string[];
 }
 
 export interface Proposal {
