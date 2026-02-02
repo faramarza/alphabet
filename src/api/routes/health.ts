@@ -5,7 +5,7 @@
 import { Router } from 'express';
 import { healthCheck } from '../../db/client.js';
 import { getSystemStateService } from '../../services/system-state.js';
-import { getGoogleAdsAdapter } from '../../adapters/google-ads.js';
+import { getGoogleAdsAdapter, validateGoogleAdsAccess } from '../../adapters/google-ads.js';
 
 const router = Router();
 
@@ -49,6 +49,24 @@ router.get('/detailed', async (_req, res) => {
       system_state: systemState,
       uptime_seconds: process.uptime(),
       memory: process.memoryUsage(),
+    },
+  });
+});
+
+/**
+ * GET /health/google-ads
+ * Diagnostic endpoint for Google Ads API connection
+ */
+router.get('/google-ads', async (_req, res) => {
+  const result = await validateGoogleAdsAccess();
+
+  res.json({
+    success: result.success,
+    data: {
+      mode: result.mode,
+      connected: result.success,
+      error: result.error,
+      help: result.help,
     },
   });
 });

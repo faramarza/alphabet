@@ -139,6 +139,8 @@ class GoogleAdsClient {
   isStub = false;
   private client: GoogleAdsApi;
   private customer: Customer;
+  private accessVerified = false;
+  private accessError: string | null = null;
 
   constructor() {
     if (!config.googleAds.customerId || !config.googleAds.developerToken) {
@@ -158,6 +160,35 @@ class GoogleAdsClient {
     });
   }
 
+  /**
+   * Checks if the API has proper access to the customer account
+   * Test Account access level can only access test accounts, not real ones
+   */
+  private parseApiError(error: unknown): string {
+    const errorStr = String(error);
+
+    // Check for 404 error which indicates test account access trying to reach real accounts
+    if (errorStr.includes('404') || errorStr.includes('was not found')) {
+      return 'ACCESS_DENIED: Your Google Ads API developer token has "Test Account" access level, ' +
+        'which can only access test accounts, not real advertising accounts. ' +
+        'To access real accounts, you must apply for "Standard Access" at: ' +
+        'https://developers.google.com/google-ads/api/docs/access-levels#standard_access';
+    }
+
+    // Check for authentication errors
+    if (errorStr.includes('UNAUTHENTICATED') || errorStr.includes('401')) {
+      return 'AUTHENTICATION_FAILED: Invalid OAuth credentials. Please regenerate your refresh token.';
+    }
+
+    // Check for permission errors
+    if (errorStr.includes('PERMISSION_DENIED') || errorStr.includes('403')) {
+      return 'PERMISSION_DENIED: The authenticated user does not have access to this Google Ads account. ' +
+        'Ensure the OAuth account has admin access to the customer account.';
+    }
+
+    return error instanceof Error ? error.message : 'Unknown error';
+  }
+
   async listCampaigns(): Promise<CampaignInfo[]> {
     try {
       const campaigns = await this.customer.query(`
@@ -172,6 +203,9 @@ class GoogleAdsClient {
         WHERE campaign.status != 'REMOVED'
       `);
 
+      this.accessVerified = true;
+      this.accessError = null;
+
       return campaigns.map((row) => ({
         id: String(row.campaign?.id ?? ''),
         name: row.campaign?.name ?? '',
@@ -181,8 +215,10 @@ class GoogleAdsClient {
         campaign_type: String(row.campaign?.advertising_channel_type ?? 'UNKNOWN'),
       }));
     } catch (error) {
-      console.error('[GoogleAds] Error listing campaigns:', error);
-      throw error;
+      this.accessError = this.parseApiError(error);
+      console.error('[GoogleAds] Error listing campaigns:', this.accessError);
+      console.error('[GoogleAds] Original error:', error);
+      throw new Error(this.accessError);
     }
   }
 
@@ -313,6 +349,44 @@ interface GoogleAdsAdapter {
   getCampaign(campaignId: string): Promise<CampaignInfo | null>;
   getCampaignMetrics(campaignId: string, startDate: string, endDate: string): Promise<CampaignMetrics[]>;
   updateCampaignBudget(campaignId: string, newAmountMicros: bigint): Promise<BudgetUpdateResult>;
+}
+
+/**
+ * Validates Google Ads API access and returns detailed diagnostic info
+ */
+export async function validateGoogleAdsAccess(): Promise<{
+  success: boolean;
+  mode: 'stub' | 'live';
+  error?: string;
+  help?: string;
+}> {
+  const adapter = getGoogleAdsAdapter();
+
+  if (adapter.isStub) {
+    return {
+      success: true,
+      mode: 'stub',
+      help: 'Running in stub mode. Set GOOGLE_ADS_STUB_MODE=false to use real API.',
+    };
+  }
+
+  try {
+    await adapter.listCampaigns();
+    return {
+      success: true,
+      mode: 'live',
+    };
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    return {
+      success: false,
+      mode: 'live',
+      error: errorMsg,
+      help: errorMsg.includes('Test Account')
+        ? 'Apply for Standard Access at: https://developers.google.com/google-ads/api/docs/access-levels'
+        : 'Check your API credentials and account permissions.',
+    };
+  }
 }
 
 let adapterInstance: GoogleAdsAdapter | null = null;
