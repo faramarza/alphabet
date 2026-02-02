@@ -36,6 +36,119 @@
       line-height: 1.6;
     }
 
+    /* Login Page Styles */
+    .login-page {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 50%, var(--accent) 100%);
+    }
+
+    .login-container {
+      background: white;
+      padding: 40px;
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      width: 100%;
+      max-width: 400px;
+      margin: 20px;
+    }
+
+    .login-header {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+
+    .login-header h1 {
+      color: var(--primary);
+      font-size: 24px;
+      margin-bottom: 8px;
+    }
+
+    .login-header p {
+      color: var(--text-light);
+      font-size: 14px;
+    }
+
+    .login-form .form-group {
+      margin-bottom: 20px;
+    }
+
+    .login-form label {
+      display: block;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+
+    .login-form input {
+      width: 100%;
+      padding: 14px 16px;
+      border: 2px solid var(--border);
+      border-radius: 8px;
+      font-size: 16px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .login-form input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(15, 52, 96, 0.1);
+    }
+
+    .login-form button {
+      width: 100%;
+      padding: 14px;
+      background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .login-form button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(15, 52, 96, 0.3);
+    }
+
+    .login-form button:active {
+      transform: translateY(0);
+    }
+
+    .login-form button:disabled {
+      opacity: 0.7;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .login-error {
+      background: #ffebee;
+      color: #c62828;
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      font-size: 14px;
+      display: none;
+    }
+
+    .login-error.visible {
+      display: block;
+    }
+
+    /* App Styles */
+    .app-container {
+      display: none;
+    }
+
+    .app-container.visible {
+      display: block;
+    }
+
     .container {
       max-width: 1400px;
       margin: 0 auto;
@@ -66,6 +179,27 @@
       text-align: right;
       font-size: 14px;
       opacity: 0.9;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+    }
+
+    .logout-btn {
+      background: rgba(255,255,255,0.2);
+      color: white;
+      border: 1px solid rgba(255,255,255,0.3);
+      padding: 8px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      transition: background 0.2s;
+    }
+
+    .logout-btn:hover {
+      background: rgba(255,255,255,0.3);
     }
 
     .status-badge {
@@ -588,13 +722,6 @@
       color: var(--text-light);
     }
 
-    .empty-state svg {
-      width: 48px;
-      height: 48px;
-      margin-bottom: 15px;
-      opacity: 0.5;
-    }
-
     .policy-section {
       margin-bottom: 25px;
     }
@@ -636,331 +763,451 @@
         padding: 12px 15px;
         white-space: nowrap;
       }
+
+      .login-container {
+        padding: 30px 20px;
+      }
     }
   </style>
 </head>
 <body>
-  <header>
-    <div class="container">
-      <h1>
-        Alphabet Trains Co-Pilot
-        <span id="system-status" class="status-badge status-healthy">Loading</span>
-      </h1>
-      <div class="header-info">
-        <div id="last-updated">Last updated: --</div>
-        <div id="policy-version">Policy v--</div>
+  <!-- Login Page -->
+  <div id="login-page" class="login-page">
+    <div class="login-container">
+      <div class="login-header">
+        <h1>Alphabet Trains</h1>
+        <p>Google Ads Co-Pilot</p>
       </div>
+      <div id="login-error" class="login-error"></div>
+      <form id="login-form" class="login-form" onsubmit="handleLogin(event)">
+        <div class="form-group">
+          <label for="username">Username</label>
+          <input type="text" id="username" name="username" required autocomplete="username" autofocus>
+        </div>
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input type="password" id="password" name="password" required autocomplete="current-password">
+        </div>
+        <button type="submit" id="login-btn">Sign In</button>
+      </form>
     </div>
-  </header>
-
-  <div class="nav-tabs">
-    <button class="nav-tab active" onclick="showTab('dashboard')">Dashboard</button>
-    <button class="nav-tab" onclick="showTab('proposals')">Proposals</button>
-    <button class="nav-tab" onclick="showTab('campaigns')">Campaigns</button>
-    <button class="nav-tab" onclick="showTab('policy')">Policy Settings</button>
-    <button class="nav-tab" onclick="showTab('audit')">Audit Log</button>
   </div>
 
-  <div class="container">
-    <div id="message-area"></div>
-
-    <!-- Kill Switch Banner -->
-    <div id="kill-switch-banner" class="kill-switch-banner" style="display: none;">
-      <div>
-        <h3 id="kill-switch-title">Kill Switch</h3>
-        <p id="kill-switch-status">Status loading...</p>
+  <!-- Main App -->
+  <div id="app-container" class="app-container">
+    <header>
+      <div class="container">
+        <h1>
+          Alphabet Trains Co-Pilot
+          <span id="system-status" class="status-badge status-healthy">Loading</span>
+        </h1>
+        <div class="header-actions">
+          <div class="header-info">
+            <div id="last-updated">Last updated: --</div>
+            <div id="policy-version">Policy v--</div>
+          </div>
+          <button class="logout-btn" onclick="handleLogout()">Logout</button>
+        </div>
       </div>
-      <button id="kill-switch-btn" onclick="toggleKillSwitch()" class="btn-danger">Enable Kill Switch</button>
+    </header>
+
+    <div class="nav-tabs">
+      <button class="nav-tab active" onclick="showTab('dashboard')">Dashboard</button>
+      <button class="nav-tab" onclick="showTab('proposals')">Proposals</button>
+      <button class="nav-tab" onclick="showTab('campaigns')">Campaigns</button>
+      <button class="nav-tab" onclick="showTab('policy')">Policy Settings</button>
+      <button class="nav-tab" onclick="showTab('audit')">Audit Log</button>
     </div>
 
-    <!-- Dashboard Tab -->
-    <div id="tab-dashboard" class="tab-content active">
-      <div class="grid grid-3">
-        <div class="card">
-          <h2>System Health</h2>
-          <div class="stat-grid">
-            <div class="stat-box">
-              <div class="value" id="dash-campaigns">--</div>
-              <div class="label">Active Campaigns</div>
+    <div class="container">
+      <div id="message-area"></div>
+
+      <!-- Kill Switch Banner -->
+      <div id="kill-switch-banner" class="kill-switch-banner" style="display: none;">
+        <div>
+          <h3 id="kill-switch-title">Kill Switch</h3>
+          <p id="kill-switch-status">Status loading...</p>
+        </div>
+        <button id="kill-switch-btn" onclick="toggleKillSwitch()" class="btn-danger">Enable Kill Switch</button>
+      </div>
+
+      <!-- Dashboard Tab -->
+      <div id="tab-dashboard" class="tab-content active">
+        <div class="grid grid-3">
+          <div class="card">
+            <h2>System Health</h2>
+            <div class="stat-grid">
+              <div class="stat-box">
+                <div class="value" id="dash-campaigns">--</div>
+                <div class="label">Active Campaigns</div>
+              </div>
+              <div class="stat-box">
+                <div class="value" id="dash-pending">--</div>
+                <div class="label">Pending Proposals</div>
+              </div>
+              <div class="stat-box">
+                <div class="value" id="dash-executed">--</div>
+                <div class="label">Executed Today</div>
+              </div>
             </div>
-            <div class="stat-box">
-              <div class="value" id="dash-pending">--</div>
-              <div class="label">Pending Proposals</div>
+          </div>
+
+          <div class="card">
+            <h2>Current Guardrails</h2>
+            <div class="stat-row">
+              <span class="stat-label">Break-Even ROAS</span>
+              <span class="stat-value" id="dash-breakeven">--</span>
             </div>
-            <div class="stat-box">
-              <div class="value" id="dash-executed">--</div>
-              <div class="label">Executed Today</div>
+            <div class="stat-row">
+              <span class="stat-label">Target ROAS</span>
+              <span class="stat-value" id="dash-target">--</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">Hard Limit</span>
+              <span class="stat-value" id="dash-hardlimit">--</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">Autopilot</span>
+              <span class="stat-value" id="dash-autopilot">--</span>
+            </div>
+          </div>
+
+          <div class="card">
+            <h2>Quick Actions</h2>
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+              <button onclick="showTab('proposals')" class="btn-primary">Review Proposals</button>
+              <button onclick="showTab('policy')" class="btn-secondary">Edit Policy</button>
+              <button onclick="refreshAll()" class="btn-secondary">Refresh Data</button>
             </div>
           </div>
         </div>
 
-        <div class="card">
-          <h2>Current Guardrails</h2>
-          <div class="stat-row">
-            <span class="stat-label">Break-Even ROAS</span>
-            <span class="stat-value" id="dash-breakeven">--</span>
+        <div class="grid">
+          <div class="card">
+            <h2>Recent Proposals</h2>
+            <div id="dash-recent-proposals">
+              <div class="loading">Loading proposals</div>
+            </div>
           </div>
-          <div class="stat-row">
-            <span class="stat-label">Target ROAS</span>
-            <span class="stat-value" id="dash-target">--</span>
-          </div>
-          <div class="stat-row">
-            <span class="stat-label">Hard Limit</span>
-            <span class="stat-value" id="dash-hardlimit">--</span>
-          </div>
-          <div class="stat-row">
-            <span class="stat-label">Autopilot</span>
-            <span class="stat-value" id="dash-autopilot">--</span>
-          </div>
-        </div>
 
-        <div class="card">
-          <h2>Quick Actions</h2>
-          <div style="display: flex; flex-direction: column; gap: 10px;">
-            <button onclick="showTab('proposals')" class="btn-primary">Review Proposals</button>
-            <button onclick="showTab('policy')" class="btn-secondary">Edit Policy</button>
-            <button onclick="refreshAll()" class="btn-secondary">Refresh Data</button>
+          <div class="card">
+            <h2>Recent Activity</h2>
+            <div id="dash-recent-audit" class="audit-log" style="max-height: 300px;">
+              <div class="loading">Loading activity</div>
+            </div>
           </div>
         </div>
       </div>
 
-      <div class="grid">
-        <div class="card">
-          <h2>Recent Proposals</h2>
-          <div id="dash-recent-proposals">
-            <div class="loading">Loading proposals</div>
+      <!-- Proposals Tab -->
+      <div id="tab-proposals" class="tab-content">
+        <div class="grid">
+          <div class="card">
+            <h2>
+              Pending Proposals
+              <span id="pending-count" class="status-badge status-warning" style="font-size: 11px;">0</span>
+            </h2>
+            <div id="pending-proposals">
+              <div class="loading">Loading proposals</div>
+            </div>
           </div>
-        </div>
 
-        <div class="card">
-          <h2>Recent Activity</h2>
-          <div id="dash-recent-audit" class="audit-log" style="max-height: 300px;">
-            <div class="loading">Loading activity</div>
+          <div class="card">
+            <h2>Recently Executed</h2>
+            <div id="executed-proposals" style="max-height: 600px; overflow-y: auto;">
+              <div class="loading">Loading history</div>
+            </div>
           </div>
         </div>
       </div>
-    </div>
 
-    <!-- Proposals Tab -->
-    <div id="tab-proposals" class="tab-content">
-      <div class="grid">
-        <div class="card">
+      <!-- Campaigns Tab -->
+      <div id="tab-campaigns" class="tab-content">
+        <div class="grid">
+          <div class="card">
+            <h2>Campaigns</h2>
+            <div id="campaigns-list">
+              <div class="loading">Loading campaigns</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h2>Campaign Details</h2>
+            <div id="campaign-details">
+              <div class="empty-state">
+                <p>Select a campaign to view details</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Policy Tab -->
+      <div id="tab-policy" class="tab-content">
+        <div class="card card-full">
           <h2>
-            Pending Proposals
-            <span id="pending-count" class="status-badge status-warning" style="font-size: 11px;">0</span>
+            Policy Configuration
+            <span id="policy-version-badge" class="status-badge" style="background: var(--accent); font-size: 11px;">v--</span>
           </h2>
-          <div id="pending-proposals">
-            <div class="loading">Loading proposals</div>
-          </div>
-        </div>
 
-        <div class="card">
-          <h2>Recently Executed</h2>
-          <div id="executed-proposals" style="max-height: 600px; overflow-y: auto;">
-            <div class="loading">Loading history</div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Campaigns Tab -->
-    <div id="tab-campaigns" class="tab-content">
-      <div class="grid">
-        <div class="card">
-          <h2>Campaigns</h2>
-          <div id="campaigns-list">
-            <div class="loading">Loading campaigns</div>
-          </div>
-        </div>
-
-        <div class="card">
-          <h2>Campaign Details</h2>
-          <div id="campaign-details">
-            <div class="empty-state">
-              <p>Select a campaign to view details</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Policy Tab -->
-    <div id="tab-policy" class="tab-content">
-      <div class="card card-full">
-        <h2>
-          Policy Configuration
-          <span id="policy-version-badge" class="status-badge" style="background: var(--accent); font-size: 11px;">v--</span>
-        </h2>
-
-        <form id="policy-form" onsubmit="savePolicy(event)">
-          <div class="policy-section">
-            <h3>Profit Guardrails</h3>
-            <div class="form-row">
-              <div class="form-group">
-                <label for="break_even_roas">Break-Even ROAS</label>
-                <input type="number" id="break_even_roas" step="0.1" min="0" required>
-                <div class="form-help">Minimum ROAS to break even (e.g., 4.0)</div>
-              </div>
-              <div class="form-group">
-                <label for="target_roas">Target ROAS</label>
-                <input type="number" id="target_roas" step="0.1" min="0" required>
-                <div class="form-help">Desired ROAS for scaling up (e.g., 5.0)</div>
-              </div>
-            </div>
-          </div>
-
-          <div class="policy-section">
-            <h3>Spending Limits</h3>
-            <div class="form-row">
-              <div class="form-group">
-                <label for="max_daily_spend_cap">Max Daily Spend Cap ($)</label>
-                <input type="number" id="max_daily_spend_cap" step="1" min="0" required>
-                <div class="form-help">Maximum daily budget per campaign</div>
-              </div>
-              <div class="form-group">
-                <label for="hard_limit">Hard Limit ($)</label>
-                <input type="number" id="hard_limit" step="1" min="0" required>
-                <div class="form-help">Absolute maximum - never exceeded</div>
-              </div>
-              <div class="form-group">
-                <label for="max_weekly_loss_usd">Max Weekly Loss ($)</label>
-                <input type="number" id="max_weekly_loss_usd" step="1" min="0" required>
-                <div class="form-help">Maximum acceptable weekly loss</div>
-              </div>
-            </div>
-          </div>
-
-          <div class="policy-section">
-            <h3>Budget Change Limits</h3>
-            <div class="form-row">
-              <div class="form-group">
-                <label for="max_step_budget_increase_pct">Max Increase per Step (%)</label>
-                <input type="number" id="max_step_budget_increase_pct" step="1" min="0" max="100" required>
-                <div class="form-help">Maximum budget increase percentage</div>
-              </div>
-              <div class="form-group">
-                <label for="max_step_budget_decrease_pct">Max Decrease per Step (%)</label>
-                <input type="number" id="max_step_budget_decrease_pct" step="1" min="0" max="100" required>
-                <div class="form-help">Maximum budget decrease percentage</div>
-              </div>
-              <div class="form-group">
-                <label for="cooldown_days_budget_changes">Cooldown Days</label>
-                <input type="number" id="cooldown_days_budget_changes" step="1" min="0" required>
-                <div class="form-help">Days between budget changes</div>
-              </div>
-            </div>
-          </div>
-
-          <div class="policy-section">
-            <h3>Safety Thresholds</h3>
-            <div class="form-row">
-              <div class="form-group">
-                <label for="roas_drop_safety_threshold_pct">ROAS Drop Safety Threshold (%)</label>
-                <input type="number" id="roas_drop_safety_threshold_pct" step="1" min="0" max="100" required>
-                <div class="form-help">Trigger safety stop if ROAS drops by this %</div>
-              </div>
-              <div class="form-group">
-                <label for="min_conversions_for_confidence">Min Conversions for Confidence</label>
-                <input type="number" id="min_conversions_for_confidence" step="1" min="0" required>
-                <div class="form-help">Minimum conversions needed for proposals</div>
-              </div>
-              <div class="form-group">
-                <label for="min_data_days_for_proposal">Min Data Days for Proposal</label>
-                <input type="number" id="min_data_days_for_proposal" step="1" min="1" required>
-                <div class="form-help">Minimum days of data needed</div>
-              </div>
-            </div>
-          </div>
-
-          <div class="policy-section">
-            <h3>Operations Integration</h3>
-            <div class="form-row">
-              <div class="form-group">
-                <label for="max_lead_time_days_for_scaling">Max Lead Time Days for Scaling</label>
-                <input type="number" id="max_lead_time_days_for_scaling" step="1" min="0" required>
-                <div class="form-help">Block scaling if lead time exceeds this</div>
-              </div>
-              <div class="form-group">
-                <label>Block Scaling on High Fulfillment Risk</label>
-                <div style="padding: 8px 0;">
-                  <label class="toggle-switch">
-                    <input type="checkbox" id="block_scaling_on_high_fulfillment_risk">
-                    <span class="toggle-slider"></span>
-                  </label>
+          <form id="policy-form" onsubmit="savePolicy(event)">
+            <div class="policy-section">
+              <h3>Profit Guardrails</h3>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="break_even_roas">Break-Even ROAS</label>
+                  <input type="number" id="break_even_roas" step="0.1" min="0" required>
+                  <div class="form-help">Minimum ROAS to break even (e.g., 4.0)</div>
+                </div>
+                <div class="form-group">
+                  <label for="target_roas">Target ROAS</label>
+                  <input type="number" id="target_roas" step="0.1" min="0" required>
+                  <div class="form-help">Desired ROAS for scaling up (e.g., 5.0)</div>
                 </div>
               </div>
             </div>
-          </div>
 
-          <div class="policy-section">
-            <h3>Autopilot Settings</h3>
-            <div class="form-row">
-              <div class="form-group">
-                <label>Autopilot Enabled</label>
-                <div style="padding: 8px 0;">
-                  <label class="toggle-switch">
-                    <input type="checkbox" id="autopilot_enabled">
-                    <span class="toggle-slider"></span>
-                  </label>
+            <div class="policy-section">
+              <h3>Spending Limits</h3>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="max_daily_spend_cap">Max Daily Spend Cap ($)</label>
+                  <input type="number" id="max_daily_spend_cap" step="1" min="0" required>
+                  <div class="form-help">Maximum daily budget per campaign</div>
                 </div>
-                <div class="form-help">Allow automatic execution of approved proposals</div>
-              </div>
-              <div class="form-group">
-                <label for="autopilot_max_budget_change_usd">Autopilot Max Budget Change ($)</label>
-                <input type="number" id="autopilot_max_budget_change_usd" step="1" min="0" required>
-                <div class="form-help">Max budget change allowed in autopilot mode</div>
+                <div class="form-group">
+                  <label for="hard_limit">Hard Limit ($)</label>
+                  <input type="number" id="hard_limit" step="1" min="0" required>
+                  <div class="form-help">Absolute maximum - never exceeded</div>
+                </div>
+                <div class="form-group">
+                  <label for="max_weekly_loss_usd">Max Weekly Loss ($)</label>
+                  <input type="number" id="max_weekly_loss_usd" step="1" min="0" required>
+                  <div class="form-help">Maximum acceptable weekly loss</div>
+                </div>
               </div>
             </div>
+
+            <div class="policy-section">
+              <h3>Budget Change Limits</h3>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="max_step_budget_increase_pct">Max Increase per Step (%)</label>
+                  <input type="number" id="max_step_budget_increase_pct" step="1" min="0" max="100" required>
+                  <div class="form-help">Maximum budget increase percentage</div>
+                </div>
+                <div class="form-group">
+                  <label for="max_step_budget_decrease_pct">Max Decrease per Step (%)</label>
+                  <input type="number" id="max_step_budget_decrease_pct" step="1" min="0" max="100" required>
+                  <div class="form-help">Maximum budget decrease percentage</div>
+                </div>
+                <div class="form-group">
+                  <label for="cooldown_days_budget_changes">Cooldown Days</label>
+                  <input type="number" id="cooldown_days_budget_changes" step="1" min="0" required>
+                  <div class="form-help">Days between budget changes</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="policy-section">
+              <h3>Safety Thresholds</h3>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="roas_drop_safety_threshold_pct">ROAS Drop Safety Threshold (%)</label>
+                  <input type="number" id="roas_drop_safety_threshold_pct" step="1" min="0" max="100" required>
+                  <div class="form-help">Trigger safety stop if ROAS drops by this %</div>
+                </div>
+                <div class="form-group">
+                  <label for="min_conversions_for_confidence">Min Conversions for Confidence</label>
+                  <input type="number" id="min_conversions_for_confidence" step="1" min="0" required>
+                  <div class="form-help">Minimum conversions needed for proposals</div>
+                </div>
+                <div class="form-group">
+                  <label for="min_data_days_for_proposal">Min Data Days for Proposal</label>
+                  <input type="number" id="min_data_days_for_proposal" step="1" min="1" required>
+                  <div class="form-help">Minimum days of data needed</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="policy-section">
+              <h3>Operations Integration</h3>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="max_lead_time_days_for_scaling">Max Lead Time Days for Scaling</label>
+                  <input type="number" id="max_lead_time_days_for_scaling" step="1" min="0" required>
+                  <div class="form-help">Block scaling if lead time exceeds this</div>
+                </div>
+                <div class="form-group">
+                  <label>Block Scaling on High Fulfillment Risk</label>
+                  <div style="padding: 8px 0;">
+                    <label class="toggle-switch">
+                      <input type="checkbox" id="block_scaling_on_high_fulfillment_risk">
+                      <span class="toggle-slider"></span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="policy-section">
+              <h3>Autopilot Settings</h3>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Autopilot Enabled</label>
+                  <div style="padding: 8px 0;">
+                    <label class="toggle-switch">
+                      <input type="checkbox" id="autopilot_enabled">
+                      <span class="toggle-slider"></span>
+                    </label>
+                  </div>
+                  <div class="form-help">Allow automatic execution of approved proposals</div>
+                </div>
+                <div class="form-group">
+                  <label for="autopilot_max_budget_change_usd">Autopilot Max Budget Change ($)</label>
+                  <input type="number" id="autopilot_max_budget_change_usd" step="1" min="0" required>
+                  <div class="form-help">Max budget change allowed in autopilot mode</div>
+                </div>
+              </div>
+              <div class="form-group">
+                <label>Autopilot Actions</label>
+                <div style="display: flex; flex-wrap: wrap; gap: 15px; padding: 10px 0;">
+                  <label><input type="checkbox" id="autopilot_budget_increase" value="budget_increase"> Budget Increase</label>
+                  <label><input type="checkbox" id="autopilot_budget_decrease" value="budget_decrease"> Budget Decrease</label>
+                  <label><input type="checkbox" id="autopilot_product_exclusion" value="product_exclusion"> Product Exclusion</label>
+                  <label><input type="checkbox" id="autopilot_asset_replacement" value="asset_replacement"> Asset Replacement</label>
+                </div>
+              </div>
+            </div>
+
             <div class="form-group">
-              <label>Autopilot Actions</label>
-              <div style="display: flex; flex-wrap: wrap; gap: 15px; padding: 10px 0;">
-                <label><input type="checkbox" id="autopilot_budget_increase" value="budget_increase"> Budget Increase</label>
-                <label><input type="checkbox" id="autopilot_budget_decrease" value="budget_decrease"> Budget Decrease</label>
-                <label><input type="checkbox" id="autopilot_product_exclusion" value="product_exclusion"> Product Exclusion</label>
-                <label><input type="checkbox" id="autopilot_asset_replacement" value="asset_replacement"> Asset Replacement</label>
-              </div>
+              <label for="policy_reason">Reason for Change *</label>
+              <input type="text" id="policy_reason" placeholder="e.g., Adjusting thresholds for Q1 campaign" required>
             </div>
-          </div>
 
-          <div class="form-group">
-            <label for="policy_reason">Reason for Change *</label>
-            <input type="text" id="policy_reason" placeholder="e.g., Adjusting thresholds for Q1 campaign" required>
-          </div>
-
-          <div style="display: flex; gap: 10px; margin-top: 20px;">
-            <button type="submit" class="btn-success">Save Policy</button>
-            <button type="button" onclick="loadPolicy()" class="btn-secondary">Reset to Current</button>
-          </div>
-        </form>
+            <div style="display: flex; gap: 10px; margin-top: 20px;">
+              <button type="submit" class="btn-success">Save Policy</button>
+              <button type="button" onclick="loadPolicy()" class="btn-secondary">Reset to Current</button>
+            </div>
+          </form>
+        </div>
       </div>
-    </div>
 
-    <!-- Audit Tab -->
-    <div id="tab-audit" class="tab-content">
-      <div class="card card-full">
-        <h2>Audit Log</h2>
-        <div id="audit-log" class="audit-log">
-          <div class="loading">Loading audit log</div>
+      <!-- Audit Tab -->
+      <div id="tab-audit" class="tab-content">
+        <div class="card card-full">
+          <h2>Audit Log</h2>
+          <div id="audit-log" class="audit-log">
+            <div class="loading">Loading audit log</div>
+          </div>
         </div>
       </div>
     </div>
   </div>
 
   <script>
-    // State
+    // Auth state
+    let authCredentials = null;
     let currentPolicy = null;
     let killSwitchEnabled = false;
     let selectedCampaignId = null;
 
-    // API helper - uses Basic Auth from browser
+    // Check for saved session on load
+    function checkSession() {
+      const saved = sessionStorage.getItem('auth');
+      if (saved) {
+        try {
+          authCredentials = JSON.parse(saved);
+          showApp();
+          return true;
+        } catch (e) {
+          sessionStorage.removeItem('auth');
+        }
+      }
+      return false;
+    }
+
+    // Handle login
+    async function handleLogin(event) {
+      event.preventDefault();
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
+      const loginBtn = document.getElementById('login-btn');
+      const errorEl = document.getElementById('login-error');
+
+      loginBtn.disabled = true;
+      loginBtn.textContent = 'Signing in...';
+      errorEl.classList.remove('visible');
+
+      // Create credentials
+      authCredentials = { username, password };
+
+      try {
+        // Test credentials with a simple API call
+        const response = await api('/health');
+        if (response.success) {
+          // Save to session
+          sessionStorage.setItem('auth', JSON.stringify(authCredentials));
+          showApp();
+        } else {
+          throw new Error('Authentication failed');
+        }
+      } catch (e) {
+        authCredentials = null;
+        errorEl.textContent = 'Invalid username or password';
+        errorEl.classList.add('visible');
+        loginBtn.disabled = false;
+        loginBtn.textContent = 'Sign In';
+      }
+    }
+
+    // Handle logout
+    function handleLogout() {
+      authCredentials = null;
+      sessionStorage.removeItem('auth');
+      showLogin();
+    }
+
+    // Show login page
+    function showLogin() {
+      document.getElementById('login-page').style.display = 'flex';
+      document.getElementById('app-container').classList.remove('visible');
+      document.getElementById('username').value = '';
+      document.getElementById('password').value = '';
+      document.getElementById('login-error').classList.remove('visible');
+    }
+
+    // Show app
+    function showApp() {
+      document.getElementById('login-page').style.display = 'none';
+      document.getElementById('app-container').classList.add('visible');
+      refreshAll();
+    }
+
+    // API helper with Basic Auth
     async function api(endpoint, options = {}) {
+      if (!authCredentials) {
+        showLogin();
+        throw new Error('Not authenticated');
+      }
+
+      const credentials = btoa(`${authCredentials.username}:${authCredentials.password}`);
+
       const response = await fetch(`/api${endpoint}`, {
         ...options,
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Basic ${credentials}`,
           ...options.headers
         }
       });
+
+      // Check for auth failure
+      if (response.status === 401) {
+        handleLogout();
+        throw new Error('Session expired');
+      }
+
       return response.json();
     }
 
@@ -981,15 +1228,19 @@
 
     // Load all data
     async function refreshAll() {
-      await Promise.all([
-        loadSystemState(),
-        loadProposals(),
-        loadCampaigns(),
-        loadPolicy(),
-        loadAuditLog(),
-        loadDashboard()
-      ]);
-      document.getElementById('last-updated').textContent = 'Last updated: ' + new Date().toLocaleTimeString();
+      try {
+        await Promise.all([
+          loadSystemState(),
+          loadProposals(),
+          loadCampaigns(),
+          loadPolicy(),
+          loadAuditLog(),
+          loadDashboard()
+        ]);
+        document.getElementById('last-updated').textContent = 'Last updated: ' + new Date().toLocaleTimeString();
+      } catch (e) {
+        console.error('Failed to refresh:', e);
+      }
     }
 
     // Load system state
@@ -1294,7 +1545,7 @@
     // Select campaign
     async function selectCampaign(campaignId) {
       selectedCampaignId = campaignId;
-      await loadCampaigns(); // Refresh to show selection
+      await loadCampaigns();
 
       try {
         const result = await api(`/snapshots/metrics?campaign_id=${campaignId}`);
@@ -1361,7 +1612,6 @@
           currentPolicy = result.data;
           const p = result.data.config;
 
-          // Update dashboard
           document.getElementById('dash-breakeven').textContent = p.break_even_roas;
           document.getElementById('dash-target').textContent = p.target_roas;
           document.getElementById('dash-hardlimit').textContent = '$' + p.hard_limit;
@@ -1369,7 +1619,6 @@
           document.getElementById('policy-version').textContent = 'Policy v' + result.data.version;
           document.getElementById('policy-version-badge').textContent = 'v' + result.data.version;
 
-          // Fill form
           document.getElementById('break_even_roas').value = p.break_even_roas;
           document.getElementById('target_roas').value = p.target_roas;
           document.getElementById('max_daily_spend_cap').value = p.max_daily_spend_cap;
@@ -1386,7 +1635,6 @@
           document.getElementById('autopilot_enabled').checked = p.autopilot_enabled;
           document.getElementById('autopilot_max_budget_change_usd').value = p.autopilot_max_budget_change_usd;
 
-          // Autopilot actions
           const actions = p.autopilot_actions || [];
           document.getElementById('autopilot_budget_increase').checked = actions.includes('budget_increase');
           document.getElementById('autopilot_budget_decrease').checked = actions.includes('budget_decrease');
@@ -1486,11 +1734,17 @@
       }
     }
 
-    // Auto-refresh every 60 seconds
-    setInterval(refreshAll, 60000);
+    // Auto-refresh every 60 seconds (only if logged in)
+    setInterval(() => {
+      if (authCredentials) {
+        refreshAll();
+      }
+    }, 60000);
 
-    // Initial load
-    refreshAll();
+    // Initial check
+    if (!checkSession()) {
+      showLogin();
+    }
   </script>
 </body>
 </html>
