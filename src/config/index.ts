@@ -30,6 +30,7 @@ const productionEnvSchema = z.object({
   BASIC_AUTH_PASS: z.string().min(16, 'BASIC_AUTH_PASS must be at least 16 characters'),
 
   // Google Ads API
+  GOOGLE_ADS_STUB_MODE: z.coerce.boolean().default(true),
   GOOGLE_ADS_DEVELOPER_TOKEN: z.string().optional(),
   GOOGLE_ADS_CLIENT_ID: z.string().optional(),
   GOOGLE_ADS_CLIENT_SECRET: z.string().optional(),
@@ -89,6 +90,7 @@ const developmentEnvSchema = z.object({
   BASIC_AUTH_PASS: z.string().optional(),
 
   // Google Ads API
+  GOOGLE_ADS_STUB_MODE: z.coerce.boolean().default(true),
   GOOGLE_ADS_DEVELOPER_TOKEN: z.string().optional(),
   GOOGLE_ADS_CLIENT_ID: z.string().optional(),
   GOOGLE_ADS_CLIENT_SECRET: z.string().optional(),
@@ -172,6 +174,7 @@ function loadConfig() {
     },
 
     googleAds: {
+      stubMode: env.GOOGLE_ADS_STUB_MODE,
       developerToken: env.GOOGLE_ADS_DEVELOPER_TOKEN,
       clientId: env.GOOGLE_ADS_CLIENT_ID,
       clientSecret: env.GOOGLE_ADS_CLIENT_SECRET,

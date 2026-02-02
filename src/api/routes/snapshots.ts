@@ -177,7 +177,7 @@ router.get('/campaigns', async (_req, res) => {
       })),
       meta: {
         count: campaigns.length,
-        is_stub: adsAdapter.isStub(),
+        is_stub: adsAdapter.isStub,
       },
     });
   } catch (error) {

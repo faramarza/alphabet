@@ -1,15 +1,9 @@
 /**
  * Google Ads API Adapter
- * Thin wrapper for Google Ads API operations
- *
- * This adapter handles:
- * - Fetching campaign performance metrics
- * - Fetching budget settings
- * - Updating campaign budgets
- *
- * For PMax campaigns, we fetch the best available metrics and record coverage_score
+ * Uses the google-ads-api library for proper API integration
  */
 
+import { GoogleAdsApi, Customer } from 'google-ads-api';
 import { config } from '../config/index.js';
 
 // ============================================================================
@@ -51,6 +45,7 @@ export interface BudgetUpdateResult {
 // ============================================================================
 
 class GoogleAdsStub {
+  isStub = true;
   private mockCampaigns: Map<string, CampaignInfo> = new Map();
   private mockMetrics: Map<string, CampaignMetrics[]> = new Map();
 
@@ -76,7 +71,6 @@ class GoogleAdsStub {
       // Simulate realistic PMax campaign data
       const dailySpend = Math.random() * 40 + 10; // $10-50 per day
       const conversions = Math.random() * 3 + 0.5; // 0.5-3.5 conversions
-      const aov = 80 + Math.random() * 40; // $80-120 AOV
       const roas = 4 + Math.random() * 2; // 4-6 ROAS
 
       metrics.push({
@@ -142,150 +136,87 @@ class GoogleAdsStub {
 // ============================================================================
 
 class GoogleAdsClient {
-  private customerId: string;
-  private loginCustomerId: string | undefined;
-  private developerToken: string;
+  isStub = false;
+  private client: GoogleAdsApi;
+  private customer: Customer;
 
   constructor() {
     if (!config.googleAds.customerId || !config.googleAds.developerToken) {
       throw new Error('Google Ads API not configured');
     }
 
-    this.customerId = config.googleAds.customerId.replace(/-/g, '');
-    this.loginCustomerId = config.googleAds.loginCustomerId?.replace(/-/g, '');
-    this.developerToken = config.googleAds.developerToken;
-  }
-
-  private async getAccessToken(): Promise<string> {
-    // OAuth token refresh implementation
-    // In production, use google-auth-library or similar
-    const response = await fetch('https://oauth2.googleapis.com/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        client_id: config.googleAds.clientId!,
-        client_secret: config.googleAds.clientSecret!,
-        refresh_token: config.googleAds.refreshToken!,
-        grant_type: 'refresh_token',
-      }),
+    this.client = new GoogleAdsApi({
+      client_id: config.googleAds.clientId!,
+      client_secret: config.googleAds.clientSecret!,
+      developer_token: config.googleAds.developerToken,
     });
 
-    if (!response.ok) {
-      throw new Error(`Token refresh failed: ${response.status}`);
-    }
-
-    const data = (await response.json()) as { access_token: string };
-    return data.access_token;
-  }
-
-  private async makeRequest(query: string): Promise<unknown[]> {
-    const accessToken = await this.getAccessToken();
-
-    const url = `https://googleads.googleapis.com/v18/customers/${this.customerId}/googleAds:searchStream`;
-
-    const headers: Record<string, string> = {
-      Authorization: `Bearer ${accessToken}`,
-      'developer-token': this.developerToken,
-      'Content-Type': 'application/json',
-    };
-
-    if (this.loginCustomerId) {
-      headers['login-customer-id'] = this.loginCustomerId;
-    }
-
-    const response = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ query }),
+    this.customer = this.client.Customer({
+      customer_id: config.googleAds.customerId.replace(/-/g, ''),
+      login_customer_id: config.googleAds.loginCustomerId?.replace(/-/g, ''),
+      refresh_token: config.googleAds.refreshToken!,
     });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Google Ads API error: ${response.status} - ${errorText}`);
-    }
-
-    const data = (await response.json()) as { results?: unknown[] }[];
-    return data.flatMap((batch) => batch.results ?? []);
-  }
-
-  private async mutateCampaignBudget(
-    budgetResourceName: string,
-    newAmountMicros: bigint
-  ): Promise<{ operationId: string }> {
-    const accessToken = await this.getAccessToken();
-
-    const url = `https://googleads.googleapis.com/v18/customers/${this.customerId}/campaignBudgets:mutate`;
-
-    const headers: Record<string, string> = {
-      Authorization: `Bearer ${accessToken}`,
-      'developer-token': this.developerToken,
-      'Content-Type': 'application/json',
-    };
-
-    if (this.loginCustomerId) {
-      headers['login-customer-id'] = this.loginCustomerId;
-    }
-
-    const body = {
-      operations: [
-        {
-          updateMask: 'amountMicros',
-          update: {
-            resourceName: budgetResourceName,
-            amountMicros: newAmountMicros.toString(),
-          },
-        },
-      ],
-    };
-
-    const response = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Budget update failed: ${response.status} - ${errorText}`);
-    }
-
-    const data = (await response.json()) as { results?: { resourceName: string }[] };
-    const operationId = data.results?.[0]?.resourceName ?? `op_${Date.now()}`;
-
-    return { operationId };
   }
 
   async listCampaigns(): Promise<CampaignInfo[]> {
-    const query = `
-      SELECT
-        campaign.id,
-        campaign.name,
-        campaign.status,
-        campaign.advertising_channel_type,
-        campaign_budget.id,
-        campaign_budget.amount_micros
-      FROM campaign
-      WHERE campaign.status != 'REMOVED'
-    `;
+    try {
+      const campaigns = await this.customer.query(`
+        SELECT
+          campaign.id,
+          campaign.name,
+          campaign.status,
+          campaign.campaign_budget,
+          campaign.advertising_channel_type,
+          campaign_budget.amount_micros
+        FROM campaign
+        WHERE campaign.status != 'REMOVED'
+      `);
 
-    const results = (await this.makeRequest(query)) as {
-      campaign: { id: string; name: string; status: string; advertisingChannelType: string };
-      campaignBudget: { id: string; amountMicros: string };
-    }[];
-
-    return results.map((row) => ({
-      id: row.campaign.id,
-      name: row.campaign.name,
-      status: row.campaign.status as CampaignInfo['status'],
-      budget_id: row.campaignBudget.id,
-      budget_amount_micros: BigInt(row.campaignBudget.amountMicros),
-      campaign_type: row.campaign.advertisingChannelType,
-    }));
+      return campaigns.map((row) => ({
+        id: String(row.campaign?.id ?? ''),
+        name: row.campaign?.name ?? '',
+        status: (row.campaign?.status as 'ENABLED' | 'PAUSED' | 'REMOVED') ?? 'PAUSED',
+        budget_id: row.campaign?.campaign_budget ?? '',
+        budget_amount_micros: BigInt(row.campaign_budget?.amount_micros ?? 0),
+        campaign_type: String(row.campaign?.advertising_channel_type ?? 'UNKNOWN'),
+      }));
+    } catch (error) {
+      console.error('[GoogleAds] Error listing campaigns:', error);
+      throw error;
+    }
   }
 
   async getCampaign(campaignId: string): Promise<CampaignInfo | null> {
-    const campaigns = await this.listCampaigns();
-    return campaigns.find((c) => c.id === campaignId) ?? null;
+    try {
+      const campaigns = await this.customer.query(`
+        SELECT
+          campaign.id,
+          campaign.name,
+          campaign.status,
+          campaign.campaign_budget,
+          campaign.advertising_channel_type,
+          campaign_budget.amount_micros
+        FROM campaign
+        WHERE campaign.id = ${campaignId}
+      `);
+
+      if (campaigns.length === 0) {
+        return null;
+      }
+
+      const row = campaigns[0]!;
+      return {
+        id: String(row.campaign?.id ?? ''),
+        name: row.campaign?.name ?? '',
+        status: (row.campaign?.status as 'ENABLED' | 'PAUSED' | 'REMOVED') ?? 'PAUSED',
+        budget_id: row.campaign?.campaign_budget ?? '',
+        budget_amount_micros: BigInt(row.campaign_budget?.amount_micros ?? 0),
+        campaign_type: String(row.campaign?.advertising_channel_type ?? 'UNKNOWN'),
+      };
+    } catch (error) {
+      console.error('[GoogleAds] Error getting campaign:', error);
+      throw error;
+    }
   }
 
   async getCampaignMetrics(
@@ -293,81 +224,78 @@ class GoogleAdsClient {
     startDate: string,
     endDate: string
   ): Promise<CampaignMetrics[]> {
-    const query = `
-      SELECT
-        campaign.id,
-        segments.date,
-        metrics.cost_micros,
-        metrics.conversions,
-        metrics.conversions_value,
-        metrics.impressions,
-        metrics.clicks,
-        metrics.search_impression_share,
-        metrics.search_budget_lost_impression_share
-      FROM campaign
-      WHERE campaign.id = ${campaignId}
-        AND segments.date BETWEEN '${startDate}' AND '${endDate}'
-    `;
+    try {
+      const metrics = await this.customer.query(`
+        SELECT
+          campaign.id,
+          segments.date,
+          metrics.cost_micros,
+          metrics.conversions,
+          metrics.conversions_value,
+          metrics.impressions,
+          metrics.clicks,
+          metrics.search_impression_share,
+          metrics.search_budget_lost_impression_share
+        FROM campaign
+        WHERE campaign.id = ${campaignId}
+          AND segments.date BETWEEN '${startDate}' AND '${endDate}'
+        ORDER BY segments.date DESC
+      `);
 
-    const results = (await this.makeRequest(query)) as {
-      campaign: { id: string };
-      segments: { date: string };
-      metrics: {
-        costMicros: string;
-        conversions: number;
-        conversionsValue: number;
-        impressions: string;
-        clicks: string;
-        searchImpressionShare?: number;
-        searchBudgetLostImpressionShare?: number;
-      };
-    }[];
-
-    return results.map((row) => ({
-      campaign_id: row.campaign.id,
-      date: row.segments.date,
-      cost_micros: BigInt(row.metrics.costMicros),
-      conversions: row.metrics.conversions,
-      conversion_value_micros: BigInt(Math.round(row.metrics.conversionsValue * 1_000_000)),
-      impressions: parseInt(row.metrics.impressions, 10),
-      clicks: parseInt(row.metrics.clicks, 10),
-      search_impression_share: row.metrics.searchImpressionShare,
-      search_lost_impression_share_budget: row.metrics.searchBudgetLostImpressionShare,
-    }));
+      return metrics.map((row) => ({
+        campaign_id: String(row.campaign?.id ?? ''),
+        date: row.segments?.date ?? '',
+        cost_micros: BigInt(row.metrics?.cost_micros ?? 0),
+        conversions: row.metrics?.conversions ?? 0,
+        conversion_value_micros: BigInt(Math.round((row.metrics?.conversions_value ?? 0) * 1_000_000)),
+        impressions: row.metrics?.impressions ?? 0,
+        clicks: row.metrics?.clicks ?? 0,
+        search_impression_share: row.metrics?.search_impression_share ?? undefined,
+        search_lost_impression_share_budget: row.metrics?.search_budget_lost_impression_share ?? undefined,
+      }));
+    } catch (error) {
+      console.error('[GoogleAds] Error getting metrics:', error);
+      throw error;
+    }
   }
 
   async updateCampaignBudget(
     campaignId: string,
     newAmountMicros: bigint
   ): Promise<BudgetUpdateResult> {
-    const campaign = await this.getCampaign(campaignId);
-    if (!campaign) {
-      return {
-        success: false,
-        previous_amount_micros: BigInt(0),
-        new_amount_micros: BigInt(0),
-        error: 'Campaign not found',
-      };
-    }
-
-    const budgetResourceName = `customers/${this.customerId}/campaignBudgets/${campaign.budget_id}`;
-
     try {
-      const { operationId } = await this.mutateCampaignBudget(
-        budgetResourceName,
-        newAmountMicros
-      );
+      // First get the current campaign to get budget resource name
+      const campaign = await this.getCampaign(campaignId);
+      if (!campaign) {
+        return {
+          success: false,
+          previous_amount_micros: BigInt(0),
+          new_amount_micros: BigInt(0),
+          error: 'Campaign not found',
+        };
+      }
+
+      const previousAmount = campaign.budget_amount_micros;
+
+      // Update the budget using the mutate API
+      const budgetResourceName = campaign.budget_id;
+
+      await this.customer.campaignBudgets.update([{
+        resource_name: budgetResourceName,
+        amount_micros: Number(newAmountMicros),
+      }]);
 
       return {
         success: true,
-        operation_id: operationId,
-        previous_amount_micros: campaign.budget_amount_micros,
+        operation_id: `op_${Date.now()}`,
+        previous_amount_micros: previousAmount,
         new_amount_micros: newAmountMicros,
       };
     } catch (error) {
+      console.error('[GoogleAds] Error updating budget:', error);
       return {
         success: false,
-        previous_amount_micros: campaign.budget_amount_micros,
+        previous_amount_micros: BigInt(0),
         new_amount_micros: newAmountMicros,
         error: error instanceof Error ? error.message : 'Unknown error',
       };
@@ -376,59 +304,33 @@ class GoogleAdsClient {
 }
 
 // ============================================================================
-// ADAPTER INTERFACE
+// ADAPTER FACTORY
 // ============================================================================
 
-export interface IGoogleAdsAdapter {
+interface GoogleAdsAdapter {
+  isStub: boolean;
   listCampaigns(): Promise<CampaignInfo[]>;
   getCampaign(campaignId: string): Promise<CampaignInfo | null>;
-  getCampaignMetrics(
-    campaignId: string,
-    startDate: string,
-    endDate: string
-  ): Promise<CampaignMetrics[]>;
-  updateCampaignBudget(
-    campaignId: string,
-    newAmountMicros: bigint
-  ): Promise<BudgetUpdateResult>;
-  isStub(): boolean;
+  getCampaignMetrics(campaignId: string, startDate: string, endDate: string): Promise<CampaignMetrics[]>;
+  updateCampaignBudget(campaignId: string, newAmountMicros: bigint): Promise<BudgetUpdateResult>;
 }
 
-// ============================================================================
-// FACTORY
-// ============================================================================
+let adapterInstance: GoogleAdsAdapter | null = null;
 
-export function createGoogleAdsAdapter(): IGoogleAdsAdapter {
-  if (config.googleAds.isConfigured) {
-    console.log('Using real Google Ads API');
-    const client = new GoogleAdsClient();
-    return {
-      ...client,
-      listCampaigns: () => client.listCampaigns(),
-      getCampaign: (id) => client.getCampaign(id),
-      getCampaignMetrics: (id, start, end) => client.getCampaignMetrics(id, start, end),
-      updateCampaignBudget: (id, amount) => client.updateCampaignBudget(id, amount),
-      isStub: () => false,
-    };
-  } else {
-    console.log('Google Ads API not configured, using stub');
-    const stub = new GoogleAdsStub();
-    return {
-      listCampaigns: () => stub.listCampaigns(),
-      getCampaign: (id) => stub.getCampaign(id),
-      getCampaignMetrics: (id, start, end) => stub.getCampaignMetrics(id, start, end),
-      updateCampaignBudget: (id, amount) => stub.updateCampaignBudget(id, amount),
-      isStub: () => true,
-    };
-  }
-}
-
-// Singleton instance
-let adapterInstance: IGoogleAdsAdapter | null = null;
-
-export function getGoogleAdsAdapter(): IGoogleAdsAdapter {
+export function getGoogleAdsAdapter(): GoogleAdsAdapter {
   if (!adapterInstance) {
-    adapterInstance = createGoogleAdsAdapter();
+    if (config.googleAds.stubMode) {
+      console.log('[GoogleAds] Using stub mode (no real API calls)');
+      adapterInstance = new GoogleAdsStub();
+    } else {
+      console.log('[GoogleAds] Using real Google Ads API');
+      adapterInstance = new GoogleAdsClient();
+    }
   }
   return adapterInstance;
+}
+
+// Reset adapter (for testing)
+export function resetGoogleAdsAdapter(): void {
+  adapterInstance = null;
 }

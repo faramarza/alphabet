@@ -27,7 +27,7 @@ router.get('/', async (_req, res) => {
       database: dbHealthy ? 'connected' : 'disconnected',
       kill_switch: systemState.kill_switch_enabled ? 'ENABLED' : 'disabled',
       safety_stop: systemState.safety_stop_active ? 'ACTIVE' : 'inactive',
-      google_ads: adsAdapter.isStub() ? 'stub' : 'connected',
+      google_ads: adsAdapter.isStub ? 'stub' : 'connected',
     },
     version: process.env['npm_package_version'] ?? '1.0.0',
   });
