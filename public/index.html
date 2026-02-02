@@ -1145,7 +1145,7 @@
       try {
         // Test credentials with a simple API call
         const response = await api('/health');
-        if (response.success) {
+        if (response.status === 'healthy') {
           // Save to session
           sessionStorage.setItem('auth', JSON.stringify(authCredentials));
           showApp();
