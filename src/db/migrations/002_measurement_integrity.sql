@@ -69,7 +69,7 @@ CREATE TABLE proposal_cooldowns (
     )
 );
 
-CREATE INDEX idx_proposal_cooldowns_active ON proposal_cooldowns(ends_at) WHERE ends_at > NOW();
+CREATE INDEX idx_proposal_cooldowns_active ON proposal_cooldowns(ends_at DESC);
 CREATE INDEX idx_proposal_cooldowns_campaign ON proposal_cooldowns(campaign_id, ends_at DESC);
 
 -- ============================================================================
