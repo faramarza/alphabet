@@ -121,7 +121,7 @@ All budget changes are logged in the audit trail.
       body,
       priority: 'high',
       channels: ['email', 'slack'],
-      metadata: data,
+      metadata: data as unknown as Record<string, unknown>,
     });
   }
 
@@ -153,7 +153,7 @@ Policy changes are versioned and immutable once created.
       body,
       priority: 'urgent',
       channels: ['email', 'slack'],
-      metadata: data,
+      metadata: data as unknown as Record<string, unknown>,
     });
   }
 
@@ -190,7 +190,7 @@ This is an automated notification from the Alphabet Trains Google Ads Co-Pilot.
       body,
       priority: 'urgent',
       channels: ['email', 'slack'],
-      metadata: data,
+      metadata: data as unknown as Record<string, unknown>,
     });
   }
 
@@ -223,7 +223,7 @@ This is an automated notification from the Alphabet Trains Google Ads Co-Pilot.
       body,
       priority: 'normal',
       channels: ['email'],
-      metadata: data,
+      metadata: data as unknown as Record<string, unknown>,
     });
   }
 
@@ -260,7 +260,7 @@ This is an automated notification from the Alphabet Trains Google Ads Co-Pilot.
       body,
       priority: 'low',
       channels: ['email'],
-      metadata: data,
+      metadata: data as unknown as Record<string, unknown>,
     });
   }
 

@@ -1,6 +1,7 @@
 {
   "name": "alphabet-trains-google-ads-copilot",
   "version": "1.0.0",
+  "type": "module",
   "description": "Safety-constrained agentic Google Ads Co-Pilot for Retail PMax",
   "main": "dist/index.js",
   "scripts": {

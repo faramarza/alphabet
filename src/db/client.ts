@@ -3,7 +3,7 @@
  * Uses native pg library with connection pooling
  */
 
-import { Pool, PoolClient, QueryResult } from 'pg';
+import { Pool, PoolClient, QueryResult, QueryResultRow } from 'pg';
 import { config } from '../config/index.js';
 
 let pool: Pool | null = null;
@@ -25,20 +25,22 @@ export function getPool(): Pool {
   return pool;
 }
 
-export async function query<T extends Record<string, unknown>>(
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function query<T>(
   text: string,
   params?: unknown[]
-): Promise<QueryResult<T>> {
+): Promise<{ rows: T[]; rowCount: number | null }> {
   const pool = getPool();
   const start = Date.now();
-  const result = await pool.query<T>(text, params);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const result = await pool.query(text, params);
   const duration = Date.now() - start;
 
   if (config.logLevel === 'debug') {
     console.log('Executed query', { text: text.substring(0, 100), duration, rows: result.rowCount });
   }
 
-  return result;
+  return { rows: result.rows as T[], rowCount: result.rowCount };
 }
 
 export async function getClient(): Promise<PoolClient> {

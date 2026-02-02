@@ -11,12 +11,12 @@ import { getSnapshotsService } from './snapshots.js';
 import { getSystemStateService } from './system-state.js';
 import { logAuditEvent } from './audit.js';
 import { getNotifier } from './notifier.js';
-import type {
-  Proposal,
+import {
   ProposalStatus,
   ProposalType,
-  ExecutionResult,
   AuditEventType,
+  type Proposal,
+  type ExecutionResult,
 } from '../types/index.js';
 
 // ============================================================================
@@ -51,7 +51,7 @@ async function validateExecutionConditions(proposal: Proposal): Promise<Validati
 
   // For budget proposals, validate the proposed value against current policy
   if (proposal.type === ProposalType.BUDGET_INCREASE || proposal.type === ProposalType.BUDGET_DECREASE) {
-    const proposedValue = parseFloat(proposal.approved_value ?? proposal.proposed_value);
+    const proposedValue = parseFloat(String(proposal.approved_value ?? proposal.proposed_value));
     if (proposedValue > policy.hard_limit) {
       policyStillAllows = false;
       reasons.push(`Proposed budget $${proposedValue} exceeds hard limit $${policy.hard_limit}`);
@@ -333,8 +333,8 @@ export class ExecutorService {
           campaign_name: proposal.campaign_name,
           proposal_id: proposal.id,
           proposal_type: proposal.type,
-          previous_budget: executionResult.before_value,
-          new_budget: executionResult.after_value,
+          previous_budget: String(executionResult.before_value),
+          new_budget: String(executionResult.after_value),
           change_pct: proposal.change_pct ?? 0,
           approved_by: proposal.approved_by ?? 'autopilot',
           reason_codes: proposal.evidence.reason_codes,
@@ -380,7 +380,7 @@ export class ExecutorService {
     const adsAdapter = getGoogleAdsAdapter();
 
     // Get the value to use (approved value takes precedence)
-    const targetBudgetUsd = parseFloat(proposal.approved_value ?? proposal.proposed_value);
+    const targetBudgetUsd = parseFloat(String(proposal.approved_value ?? proposal.proposed_value));
     const targetBudgetMicros = BigInt(Math.round(targetBudgetUsd * 1_000_000));
 
     console.log(`[Executor] Updating budget for ${proposal.campaign_id} to $${targetBudgetUsd}`);

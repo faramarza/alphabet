@@ -10,16 +10,16 @@ import { logAuditEvent } from './audit.js';
 import { getPolicyService, getCampaignSettingsService, getOpsSignalsService } from './policy.js';
 import { getSnapshotsService } from './snapshots.js';
 import { getSystemStateService } from './system-state.js';
-import type {
-  Proposal,
+import {
   ProposalStatus,
   ProposalType,
-  EvidencePack,
-  ImpactRange,
-  AggregatedMetrics,
-  PolicyConfig,
   AuditEventType,
-  ExecutionResult,
+  type Proposal,
+  type EvidencePack,
+  type ImpactRange,
+  type AggregatedMetrics,
+  type PolicyConfig,
+  type ExecutionResult,
 } from '../types/index.js';
 
 // ============================================================================

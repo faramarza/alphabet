@@ -10,6 +10,7 @@ import { getExecutorService } from './services/executor.js';
 import { getNotifier } from './services/notifier.js';
 import { getProposalGeneratorService } from './services/proposals.js';
 import { getAuditLogger } from './services/audit.js';
+import { AuditEventType } from './types/index.js';
 
 // Lock IDs for advisory locks
 const LOCK_IDS = {
@@ -117,15 +118,15 @@ async function sendDailySummary(): Promise<void> {
   const campaignsModified: string[] = [];
 
   for (const proposal of todayProposals.filter((p) => p.status === 'executed')) {
-    const before = parseFloat(proposal.current_value);
-    const after = parseFloat(proposal.execution_result?.after_value ?? proposal.current_value);
+    const before = parseFloat(String(proposal.current_value));
+    const after = parseFloat(String(proposal.execution_result?.after_value ?? proposal.current_value));
     totalSpendChange += after - before;
     campaignsModified.push(proposal.campaign_name);
   }
 
   // Get safety events from audit
   const auditEvents = await auditLogger.query({
-    event_type: 'safety_stop_triggered',
+    event_type: AuditEventType.SAFETY_STOP_TRIGGERED,
     start_date: new Date(today),
   });
   const safetyEvents = auditEvents.map((e) => e.action);

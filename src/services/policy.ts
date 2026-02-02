@@ -7,15 +7,15 @@
 import { v4 as uuidv4 } from 'uuid';
 import { query, transaction } from '../db/client.js';
 import { logAuditEvent } from './audit.js';
-import type {
-  Policy,
-  PolicyConfig,
-  PolicyOverride,
-  CampaignSettings,
-  OpsSignal,
+import {
   CampaignMode,
   RiskLevel,
   AuditEventType,
+  type Policy,
+  type PolicyConfig,
+  type PolicyOverride,
+  type CampaignSettings,
+  type OpsSignal,
 } from '../types/index.js';
 
 // ============================================================================
