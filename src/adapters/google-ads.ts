@@ -181,7 +181,7 @@ class GoogleAdsClient {
   private async makeRequest(query: string): Promise<unknown[]> {
     const accessToken = await this.getAccessToken();
 
-    const url = `https://googleads.googleapis.com/v15/customers/${this.customerId}/googleAds:searchStream`;
+    const url = `https://googleads.googleapis.com/v18/customers/${this.customerId}/googleAds:searchStream`;
 
     const headers: Record<string, string> = {
       Authorization: `Bearer ${accessToken}`,
@@ -214,7 +214,7 @@ class GoogleAdsClient {
   ): Promise<{ operationId: string }> {
     const accessToken = await this.getAccessToken();
 
-    const url = `https://googleads.googleapis.com/v15/customers/${this.customerId}/campaignBudgets:mutate`;
+    const url = `https://googleads.googleapis.com/v18/customers/${this.customerId}/campaignBudgets:mutate`;
 
     const headers: Record<string, string> = {
       Authorization: `Bearer ${accessToken}`,
