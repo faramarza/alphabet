@@ -1,6 +1,13 @@
 /**
  * Proposal Generator Service
- * Generates proposals with evidence packs based on policy evaluation
+ *
+ * Generates proposals with evidence packs based on policy evaluation.
+ *
+ * DOCTRINE: No-Action Is a First-Class Outcome
+ * - If signals are ambiguous, delayed, contaminated, or weak: NO ACTION
+ * - 60-70% of evaluation cycles should result in no proposal
+ * - Doing nothing is success when conditions are unclear
+ *
  * CRITICAL: All proposals include ranges, not single-number promises
  */
 
@@ -12,6 +19,17 @@ import { getSnapshotsService } from './snapshots.js';
 import { getSystemStateService } from './system-state.js';
 import { checkMeasurementHealth, getCampaignLagAdjustedROAS } from './measurement-integrity.js';
 import { checkProposalEligibility } from './proposal-quality.js';
+import {
+  runGovernanceCheck,
+  classifyReversibility,
+  isAutopilotAllowed,
+  buildInactionJustification,
+  checkImpressionShareDoctrine,
+  recordCycleOutcome,
+  type ReversibilityClassification,
+  type InactionJustification,
+  type RollbackPlan,
+} from './governance.js';
 import {
   ProposalStatus,
   ProposalType,
@@ -102,7 +120,13 @@ export class ProposalGeneratorService {
 
   /**
    * Generate budget change proposals for a campaign
-   * ENHANCED: Now includes measurement integrity and proposal quality checks
+   *
+   * DOCTRINE ENFORCEMENT:
+   * - Governance check (OBSERVE-ONLY mode, measurement integrity)
+   * - Reversibility classification
+   * - Inaction justification ("why is action safer than inaction")
+   * - Rollback plan
+   * - Impression share doctrine compliance
    */
   async generateBudgetProposals(
     campaignId: string,
@@ -116,25 +140,39 @@ export class ProposalGeneratorService {
     const systemState = getSystemStateService();
 
     // =========================================================================
-    // STEP 1: Check Measurement Integrity (NEW)
+    // STEP 0: Check Measurement Integrity First (for governance check)
     // =========================================================================
     const measurementHealth = await checkMeasurementHealth(campaignId);
 
-    if (!measurementHealth.canPropose) {
-      console.log(`[Proposal] Measurement integrity check failed for ${campaignId}:`);
-      measurementHealth.issues.forEach(issue => {
-        console.log(`  - [${issue.severity}] ${issue.type}: ${issue.message}`);
-      });
+    // =========================================================================
+    // STEP 1: Run Governance Check (OBSERVE-ONLY, kill switch, action rate)
+    // =========================================================================
+    const governanceDecision = await runGovernanceCheck({
+      campaignId,
+      measurementHealth: {
+        canPropose: measurementHealth.canPropose,
+        confidence: measurementHealth.confidence,
+        issues: measurementHealth.issues,
+      },
+    });
+
+    if (governanceDecision.action !== 'NO_ACTION') {
+      console.log(`[Proposal] Governance: ${governanceDecision.action} - ${governanceDecision.reason}`);
       return null;
     }
 
     // =========================================================================
-    // STEP 2: Check Proposal Quality Gates (NEW)
+    // STEP 2: Check Proposal Quality Gates
     // =========================================================================
     const eligibility = await checkProposalEligibility(campaignId);
 
     if (!eligibility.eligible) {
       console.log(`[Proposal] Not eligible for ${campaignId}: ${eligibility.reason}`);
+      await recordCycleOutcome({
+        action: 'NO_ACTION',
+        reason: eligibility.reason ?? 'Not eligible',
+        timestamp: new Date(),
+      }, campaignId);
       return null;
     }
 
@@ -217,18 +255,86 @@ export class ProposalGeneratorService {
 
     if (!evaluation.shouldChange) {
       console.log(`[Proposal] No budget change needed for ${campaignId}`);
+      await recordCycleOutcome({
+        action: 'NO_ACTION',
+        reason: 'No budget change needed - metrics within acceptable range',
+        details: { roas: lagAdjustedData.roas, confidence: lagAdjustedData.confidence },
+        timestamp: new Date(),
+      }, campaignId);
       return null;
     }
 
-    // Calculate proposed budget
+    // =========================================================================
+    // STEP 3: Classify Reversibility (DOCTRINE REQUIREMENT)
+    // =========================================================================
+    const currentBudgetUsd = Number(currentBudgetMicros) / 1_000_000;
     const proposedBudgetMicros = this.calculateProposedBudget(
       currentBudgetMicros,
       evaluation.direction,
       evaluation.changePct,
       policy
     );
+    const proposedBudgetUsd = Number(proposedBudgetMicros) / 1_000_000;
 
-    // Build evidence pack (enhanced with measurement integrity data)
+    const reversibility = classifyReversibility(
+      evaluation.type,
+      currentBudgetUsd,
+      proposedBudgetUsd,
+      { campaignId, isExperiment: false, affectsLearning: false }
+    );
+
+    console.log(`[Proposal] ${campaignId} reversibility: ${reversibility.level} - ${reversibility.description}`);
+
+    // =========================================================================
+    // STEP 4: Check Impression Share Doctrine Compliance
+    // =========================================================================
+    const impressionShareCheck = checkImpressionShareDoctrine(
+      evaluation.reasons.join(' '),
+      evaluation.reasons.map(code => REASON_CODES[code as keyof typeof REASON_CODES] ?? code)
+    );
+
+    if (!impressionShareCheck.compliant) {
+      console.log(`[Proposal] DOCTRINE VIOLATION for ${campaignId}: ${impressionShareCheck.violation}`);
+      await recordCycleOutcome({
+        action: 'NO_ACTION',
+        reason: `Impression share doctrine violation: ${impressionShareCheck.violation}`,
+        timestamp: new Date(),
+      }, campaignId);
+      return null;
+    }
+
+    // =========================================================================
+    // STEP 5: Build Inaction Justification (DOCTRINE REQUIREMENT)
+    // =========================================================================
+    const avgDailySpendUsd = Number(metrics7d.avg_daily_cost_micros) / 1_000_000;
+    const budgetUtilization = (avgDailySpendUsd / currentBudgetUsd) * 100;
+
+    const inactionJustification = buildInactionJustification(
+      evaluation.type,
+      {
+        roas: lagAdjustedData.roas,
+        targetRoas: policy.target_roas,
+        breakEvenRoas: policy.break_even_roas,
+        confidence: measurementHealth.confidence,
+        budgetUtilization,
+      },
+      reversibility
+    );
+
+    // If confidence in safety is too low, don't propose
+    if (inactionJustification.confidenceInSafety < 50) {
+      console.log(`[Proposal] Confidence in safety too low (${inactionJustification.confidenceInSafety}%) for ${campaignId}`);
+      await recordCycleOutcome({
+        action: 'NO_ACTION',
+        reason: `Confidence in safety (${inactionJustification.confidenceInSafety}%) below threshold`,
+        timestamp: new Date(),
+      }, campaignId);
+      return null;
+    }
+
+    // =========================================================================
+    // STEP 6: Build Evidence Pack (enhanced with governance data)
+    // =========================================================================
     const evidence = this.buildEvidencePack(
       metrics7d,
       metrics14d,
@@ -242,28 +348,61 @@ export class ProposalGeneratorService {
         measurementConfidence: measurementHealth.confidence,
         evidenceScore: eligibility.evidenceScore,
         measurementIssues: measurementHealth.issues,
+        // NEW: Governance doctrine requirements
+        reversibility,
+        inactionJustification,
       }
     );
 
-    // Determine if autopilot can execute
-    const changeUsd = Math.abs(Number(proposedBudgetMicros - currentBudgetMicros) / 1_000_000);
-    const canAutopilot =
+    // =========================================================================
+    // STEP 7: Determine Autopilot Eligibility (DOCTRINE: Reversibility > Confidence)
+    // =========================================================================
+    const changeUsd = Math.abs(proposedBudgetUsd - currentBudgetUsd);
+    const policyAllowsAutopilot =
       policy.autopilot_enabled &&
       policy.autopilot_actions.includes(evaluation.type) &&
       changeUsd <= policy.autopilot_max_budget_change_usd;
 
-    // Create proposal
+    // DOCTRINE: Only fully reversible actions can be autopiloted
+    const reversibilityAllowsAutopilot = isAutopilotAllowed(
+      reversibility,
+      evidence.confidence_score
+    );
+
+    const canAutopilot = policyAllowsAutopilot && reversibilityAllowsAutopilot.allowed;
+
+    if (!reversibilityAllowsAutopilot.allowed) {
+      console.log(`[Proposal] Autopilot blocked for ${campaignId}: ${reversibilityAllowsAutopilot.reason}`);
+    }
+
+    // =========================================================================
+    // STEP 8: Create Proposal with Full Governance Data
+    // =========================================================================
+    // Note: Governance metadata (reversibility, rollback_plan, inaction_justification)
+    // is included in the evidence pack, not passed separately
     const proposal = await this.createProposal({
       type: evaluation.type,
       campaign_id: campaignId,
       campaign_name: campaignName,
-      current_value: (Number(currentBudgetMicros) / 1_000_000).toFixed(2),
-      proposed_value: (Number(proposedBudgetMicros) / 1_000_000).toFixed(2),
+      current_value: currentBudgetUsd.toFixed(2),
+      proposed_value: proposedBudgetUsd.toFixed(2),
       change_pct: evaluation.changePct,
       evidence,
       requires_approval: !canAutopilot,
-      auto_execute_after: canAutopilot ? new Date(Date.now() + 60 * 60 * 1000) : undefined, // 1 hour delay for autopilot
+      auto_execute_after: canAutopilot ? new Date(Date.now() + 60 * 60 * 1000) : undefined,
     });
+
+    // Record that we generated a proposal
+    await recordCycleOutcome({
+      action: 'PROPOSE_ACTION',
+      reason: `Generated ${evaluation.type} proposal`,
+      details: {
+        change_pct: evaluation.changePct,
+        reversibility: reversibility.level,
+        confidence: evidence.confidence_score,
+      },
+      timestamp: new Date(),
+    }, campaignId);
 
     return proposal;
   }
@@ -397,7 +536,12 @@ export class ProposalGeneratorService {
 
   /**
    * Build evidence pack with ranges (no single-number promises)
-   * ENHANCED: Now includes measurement integrity data
+   *
+   * DOCTRINE REQUIREMENTS INCLUDED:
+   * - Reversibility classification
+   * - Inaction justification (why action is safer than inaction)
+   * - Rollback plan
+   * - Measurement integrity data
    */
   private buildEvidencePack(
     metrics7d: AggregatedMetrics,
@@ -412,6 +556,9 @@ export class ProposalGeneratorService {
       measurementConfidence: number;
       evidenceScore: number;
       measurementIssues: Array<{ type: string; severity: string; message: string }>;
+      // NEW: Governance doctrine data
+      reversibility?: ReversibilityClassification;
+      inactionJustification?: InactionJustification;
     }
   ): EvidencePack {
     const reasonDescriptions = evaluation.reasons.map((code) => REASON_CODES[code as keyof typeof REASON_CODES] ?? code);
@@ -480,13 +627,34 @@ export class ProposalGeneratorService {
         threshold: policy.break_even_roas,
         action: 'Automatic budget decrease or pause',
       },
-      // New measurement integrity fields
+      // Measurement integrity fields
       lag_adjusted_roas: integrityData?.lagAdjustedROAS,
       measurement_confidence: integrityData?.measurementConfidence,
       evidence_score: integrityData?.evidenceScore,
       measurement_warnings: integrityData?.measurementIssues
-        .filter(i => i.severity === 'warning')
+        ?.filter(i => i.severity === 'warning')
         .map(i => i.message),
+
+      // DOCTRINE: Governance fields
+      reversibility: integrityData?.reversibility ? {
+        level: integrityData.reversibility.level,
+        description: integrityData.reversibility.description,
+        max_autopilot_allowed: integrityData.reversibility.maxAutopilotAllowed,
+        required_approval_level: integrityData.reversibility.requiredApprovalLevel,
+      } : undefined,
+      rollback_plan: integrityData?.reversibility?.rollbackPlan ? {
+        can_rollback: integrityData.reversibility.rollbackPlan.canRollback,
+        rollback_steps: integrityData.reversibility.rollbackPlan.rollbackSteps,
+        estimated_rollback_time: integrityData.reversibility.rollbackPlan.estimatedRollbackTime,
+        potential_rollback_cost: integrityData.reversibility.rollbackPlan.potentialRollbackCost,
+        rollback_triggers: integrityData.reversibility.rollbackPlan.rollbackTriggers,
+      } : undefined,
+      inaction_justification: integrityData?.inactionJustification ? {
+        why_action_safer_than_inaction: integrityData.inactionJustification.whyActionSaferThanInaction,
+        evidence_for_safety: integrityData.inactionJustification.evidenceForSafety,
+        downside_of_inaction: integrityData.inactionJustification.downsideOfInaction,
+        confidence_in_safety: integrityData.inactionJustification.confidenceInSafety,
+      } : undefined,
     };
   }
 

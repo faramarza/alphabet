@@ -276,6 +276,27 @@ export interface EvidencePack {
   measurement_confidence?: number;
   evidence_score?: number;
   measurement_warnings?: string[];
+
+  // Governance doctrine fields (required for all proposals)
+  reversibility?: {
+    level: 'full' | 'slow' | 'irreversible';
+    description: string;
+    max_autopilot_allowed: boolean;
+    required_approval_level: 'none' | 'standard' | 'elevated';
+  };
+  rollback_plan?: {
+    can_rollback: boolean;
+    rollback_steps: string[];
+    estimated_rollback_time: string;
+    potential_rollback_cost: string;
+    rollback_triggers: string[];
+  };
+  inaction_justification?: {
+    why_action_safer_than_inaction: string;
+    evidence_for_safety: string[];
+    downside_of_inaction: string;
+    confidence_in_safety: number;
+  };
 }
 
 export interface Proposal {
