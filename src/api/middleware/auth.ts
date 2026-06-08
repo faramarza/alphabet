@@ -21,7 +21,7 @@ declare global {
 }
 
 /**
- * Validate Bearer token or Admin token
+ * Validate Bearer token, Admin token, or Basic auth
  */
 export function authMiddleware(
   req: Request,
@@ -41,7 +41,7 @@ export function authMiddleware(
     return;
   }
 
-  // Support both "Bearer <token>" and "Admin <token>" formats
+  // Support "Bearer <token>", "Admin <token>", and "Basic <base64>" formats
   const [scheme, token] = authHeader.split(' ');
 
   if (!token) {
@@ -50,6 +50,33 @@ export function authMiddleware(
       error: {
         code: 'UNAUTHORIZED',
         message: 'Invalid authorization format',
+      },
+    });
+    return;
+  }
+
+  // Check for Basic auth (from frontend)
+  if (scheme?.toLowerCase() === 'basic') {
+    try {
+      const credentials = Buffer.from(token, 'base64').toString('utf-8');
+      const [username, password] = credentials.split(':');
+
+      if (config.auth.basicAuth &&
+          username === config.auth.basicAuth.user &&
+          password === config.auth.basicAuth.pass) {
+        req.user = { id: 'admin', role: 'admin' };
+        next();
+        return;
+      }
+    } catch {
+      // Invalid base64, fall through to error
+    }
+
+    res.status(401).json({
+      success: false,
+      error: {
+        code: 'UNAUTHORIZED',
+        message: 'Invalid credentials',
       },
     });
     return;
