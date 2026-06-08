@@ -14,6 +14,13 @@ dotenv.config();
 
 const isProduction = process.env['NODE_ENV'] === 'production';
 
+// Custom boolean parser that correctly handles "false" string
+const booleanString = (defaultValue: boolean) =>
+  z.string()
+    .transform((val) => val.toLowerCase() === 'true' || val === '1')
+    .default(defaultValue ? 'true' : 'false')
+    .pipe(z.boolean());
+
 // Production schema - all secrets required
 const productionEnvSchema = z.object({
   // Database
@@ -30,7 +37,7 @@ const productionEnvSchema = z.object({
   BASIC_AUTH_PASS: z.string().min(16, 'BASIC_AUTH_PASS must be at least 16 characters'),
 
   // Google Ads API
-  GOOGLE_ADS_STUB_MODE: z.coerce.boolean().default(true),
+  GOOGLE_ADS_STUB_MODE: booleanString(true),
   GOOGLE_ADS_DEVELOPER_TOKEN: z.string().optional(),
   GOOGLE_ADS_CLIENT_ID: z.string().optional(),
   GOOGLE_ADS_CLIENT_SECRET: z.string().optional(),
@@ -90,7 +97,7 @@ const developmentEnvSchema = z.object({
   BASIC_AUTH_PASS: z.string().optional(),
 
   // Google Ads API
-  GOOGLE_ADS_STUB_MODE: z.coerce.boolean().default(true),
+  GOOGLE_ADS_STUB_MODE: booleanString(true),
   GOOGLE_ADS_DEVELOPER_TOKEN: z.string().optional(),
   GOOGLE_ADS_CLIENT_ID: z.string().optional(),
   GOOGLE_ADS_CLIENT_SECRET: z.string().optional(),
