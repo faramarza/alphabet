@@ -161,6 +161,29 @@ class GoogleAdsClient {
   }
 
   /**
+   * Map campaign status from API (may be number or string) to string
+   */
+  private mapCampaignStatus(status: unknown): 'ENABLED' | 'PAUSED' | 'REMOVED' {
+    // Handle numeric status codes
+    if (typeof status === 'number') {
+      switch (status) {
+        case 2: return 'ENABLED';
+        case 3: return 'PAUSED';
+        case 4: return 'REMOVED';
+        default: return 'PAUSED';
+      }
+    }
+    // Handle string status
+    if (typeof status === 'string') {
+      const upper = status.toUpperCase();
+      if (upper === 'ENABLED' || upper === 'PAUSED' || upper === 'REMOVED') {
+        return upper as 'ENABLED' | 'PAUSED' | 'REMOVED';
+      }
+    }
+    return 'PAUSED';
+  }
+
+  /**
    * Checks if the API has proper access to the customer account
    * Test Account access level can only access test accounts, not real ones
    */
@@ -209,7 +232,7 @@ class GoogleAdsClient {
       return campaigns.map((row) => ({
         id: String(row.campaign?.id ?? ''),
         name: row.campaign?.name ?? '',
-        status: (row.campaign?.status as 'ENABLED' | 'PAUSED' | 'REMOVED') ?? 'PAUSED',
+        status: this.mapCampaignStatus(row.campaign?.status),
         budget_id: row.campaign?.campaign_budget ?? '',
         budget_amount_micros: BigInt(row.campaign_budget?.amount_micros ?? 0),
         campaign_type: String(row.campaign?.advertising_channel_type ?? 'UNKNOWN'),
