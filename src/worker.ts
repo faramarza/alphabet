@@ -195,19 +195,24 @@ async function main(): Promise<void> {
     }, true)
   );
 
-  // Daily summary - calculate when to run (e.g., at midnight)
+  // Daily summary - run immediately on startup, then at midnight daily
+  // This ensures the user gets immediate feedback that emails are working
+  console.log('[Worker] Sending startup summary...');
+  sendDailySummary().catch((err) => console.error('[Worker] Startup summary failed:', err));
+
+  // Schedule daily summary at midnight
   const now = new Date();
   const tomorrow = new Date(now);
   tomorrow.setDate(tomorrow.getDate() + 1);
   tomorrow.setHours(0, 0, 0, 0);
   const msUntilMidnight = tomorrow.getTime() - now.getTime();
+  console.log(`[Worker] Next daily summary at midnight (in ${Math.round(msUntilMidnight / 60000)} minutes)`);
 
-  // Schedule first daily summary at midnight, then every 24 hours
   setTimeout(() => {
-    sendDailySummary();
+    sendDailySummary().catch((err) => console.error('[Worker] Daily summary failed:', err));
     timers.push(
       setInterval(() => {
-        sendDailySummary();
+        sendDailySummary().catch((err) => console.error('[Worker] Daily summary failed:', err));
       }, INTERVALS.DAILY_SUMMARY)
     );
   }, msUntilMidnight);

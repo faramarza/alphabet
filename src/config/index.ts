@@ -219,7 +219,7 @@ function loadConfig() {
         pass: env.SMTP_PASS,
         from: env.NOTIFICATION_FROM,
         to: env.NOTIFICATION_TO,
-        isConfigured: Boolean(env.SMTP_HOST && env.SMTP_USER && env.NOTIFICATION_TO),
+        isConfigured: Boolean(env.SMTP_HOST && env.SMTP_USER && env.SMTP_PASS && env.NOTIFICATION_FROM && env.NOTIFICATION_TO),
       },
       slack: {
         webhookUrl: env.SLACK_WEBHOOK_URL,

@@ -293,19 +293,34 @@ This is an automated notification from the Alphabet Trains Google Ads Co-Pilot.
     priority: Notification['priority']
   ): Promise<void> {
     if (!this.emailTransporter || !config.notifications.email.isConfigured) {
-      console.warn('[Notifier] Email not configured, skipping email notification');
+      console.warn('[Notifier] Email not configured. Required: SMTP_HOST, SMTP_USER, SMTP_PASS, NOTIFICATION_FROM, NOTIFICATION_TO');
       console.log(`[Notifier] Would send email: ${subject}`);
       return;
     }
 
+    const from = config.notifications.email.from;
+    const to = config.notifications.email.to;
+
+    if (!from || !to) {
+      console.error('[Notifier] Missing from or to address, cannot send email');
+      return;
+    }
+
+    if (!body || body.trim().length === 0) {
+      console.error('[Notifier] Empty email body, skipping');
+      return;
+    }
+
     try {
+      console.log(`[Notifier] Sending email to ${to}: ${subject}`);
       await this.emailTransporter.sendMail({
-        from: config.notifications.email.from,
-        to: config.notifications.email.to,
+        from,
+        to,
         subject,
         text: body,
         priority: priority === 'urgent' ? 'high' : priority === 'high' ? 'high' : 'normal',
       });
+      console.log(`[Notifier] Email sent successfully: ${subject}`);
     } catch (error) {
       console.error('[Notifier] Failed to send email:', error);
       // Don't throw - notifications should not block operations
