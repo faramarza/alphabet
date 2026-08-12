@@ -51,7 +51,7 @@ const productionEnvSchema = z.object({
   // Email Notifications
   SMTP_HOST: z.string().optional(),
   SMTP_PORT: z.coerce.number().default(587),
-  SMTP_SECURE: z.coerce.boolean().default(true),
+  SMTP_SECURE: booleanString(true),
   SMTP_USER: z.string().optional(),
   SMTP_PASS: z.string().optional(),
   NOTIFICATION_FROM: z.string().optional(),
@@ -66,14 +66,14 @@ const productionEnvSchema = z.object({
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('warn'),
 
   // Trusted proxy (for running behind nginx)
-  TRUST_PROXY: z.coerce.boolean().default(true),
+  TRUST_PROXY: booleanString(true),
 
   // Rate limiting
   RATE_LIMIT_WINDOW_MS: z.coerce.number().default(15 * 60 * 1000), // 15 minutes
   RATE_LIMIT_MAX_REQUESTS: z.coerce.number().default(100),
 
   // Kill switch default
-  KILL_SWITCH_ENABLED: z.coerce.boolean().default(false),
+  KILL_SWITCH_ENABLED: booleanString(false),
 });
 
 // Development schema - defaults allowed
@@ -111,7 +111,7 @@ const developmentEnvSchema = z.object({
   // Email Notifications
   SMTP_HOST: z.string().optional(),
   SMTP_PORT: z.coerce.number().default(587),
-  SMTP_SECURE: z.coerce.boolean().default(false),
+  SMTP_SECURE: booleanString(false),
   SMTP_USER: z.string().optional(),
   SMTP_PASS: z.string().optional(),
   NOTIFICATION_FROM: z.string().optional(),
@@ -125,12 +125,12 @@ const developmentEnvSchema = z.object({
   PORT: z.coerce.number().default(3000),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
 
-  TRUST_PROXY: z.coerce.boolean().default(false),
+  TRUST_PROXY: booleanString(false),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().default(15 * 60 * 1000),
   RATE_LIMIT_MAX_REQUESTS: z.coerce.number().default(1000),
 
   // Kill switch default
-  KILL_SWITCH_ENABLED: z.coerce.boolean().default(false),
+  KILL_SWITCH_ENABLED: booleanString(false),
 });
 
 function loadConfig() {
